@@ -1,276 +1,130 @@
-Fix TTY inheritance, prompt formatting, file paths, and LLM provider permissions
+Add create_overview.py utility for automatic overview.md generation
 
-Fixed "Error: 'i'" and file creation failures by escaping literal braces in
-prompts, ensuring subprocess inherits TTY, providing absolute paths, and
-configuring proper permissions for all three LLM providers (Claude, Gemini, Codex).
+Created a standalone utility that generates overview.md files from Jupyter
+notebooks using LLM analysis. This tool runs separately from and before the
+marking workflow.
 
-Root Cause Analysis:
+## New Utility: create_overview.py
 
-The issues had FOUR root causes:
-
-1. **Primary**: Prompt template formatting error
-   - pattern_designer_structured.md contained `{i}` (lines 57, 88)
-   - Python's str.format() tried to substitute `{i}` as a placeholder
-   - Raised KeyError('i') when no value provided for 'i'
-   - Exception handler printed: "Error: 'i'"
-
-2. **Secondary**: Missing TTY inheritance
-   - pattern_designer.py and aggregator.py used subprocess.run(cmd) without TTY
-   - Even when run from real terminal, subprocess didn't have TTY access
-   - Would have caused "stdout is not a terminal" error once template was fixed
-
-3. **Tertiary**: Relative file paths in prompts
-   - Prompts told agent to create files at "processed/rubric.md"
-   - Agent created files relative to CLI's working directory
-   - Files were created in wrong location, causing rubric validation to fail
-
-4. **Quaternary**: LLM provider permissions
-   - Each provider has different permission/sandbox models
-   - Default configurations prevented file creation
-   - Required provider-specific flags for automated execution
-
-Changes Made:
-
-* src/prompts/pattern_designer_structured.md:
-  - Line 57, 88: Changed `{i}` to `{{i}}` to escape literal braces
-  - Line 88: Changed `processed/activities/A{{i}}_criteria.md` to `{processed_dir}/activities/A{{i}}_criteria.md`
-  - Line 92: Changed `processed/rubric.md` to `{processed_dir}/rubric.md`
-  - Effect: Template uses absolute paths provided by Python wrapper
-
-* src/prompts/pattern_designer_freeform.md:
-  - Line 99: Changed `processed/marking_criteria.md` to `{processed_dir}/marking_criteria.md`
-  - Line 103: Changed `processed/rubric.md` to `{processed_dir}/rubric.md`
-  - Effect: Template uses absolute paths provided by Python wrapper
-
-* src/agents/pattern_designer.py:
-  - Line 92: Added `processed_dir=args.processed_dir` to format() call
-  - Line 131: Added `stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr` to subprocess.run()
-  - Effect: Passes absolute processed directory path to template and inherits TTY
-
-* src/agents/aggregator.py:
-  - Line 157: Added `stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr` to subprocess.run()
-  - Effect: Interactive CLI inherits parent's TTY for proper terminal access
-
-* src/llm_caller.sh - All three providers configured:
-
-  **Claude Code CLI:**
-  - Headless mode (lines 94-96): Added `--permission-mode bypassPermissions`
-    • Bypasses permission prompts for automated execution
-    • Allows file creation without user confirmation
-    • Safe in controlled marking environment
-  - Interactive mode: Uses tee for session capture
-  - Session capture: Full capture via tee (works in all contexts)
-
-  **Gemini CLI:**
-  - Headless mode (lines 132-134): Added `--yolo` flag
-    • Auto-approves all tool calls (YOLO = "You Only Live Once" mode)
-    • Enables file creation and shell command execution
-    • Restricts file writes to workspace directory tree
-  - Interactive mode: Uses tee for session capture
-  - Session capture: Full capture via tee (works in all contexts)
-
-  **Codex CLI:**
-  - Interactive mode (lines 165, 168): Added `--sandbox workspace-write`
-    • Enables file creation within workspace directory tree
-    • Prevents read-only sandbox limitation
-    • Allows agent to actually create files, not just claim to
-  - Headless mode (lines 176, 178): Added `--sandbox workspace-write`
-    • Same workspace-write sandbox for exec subcommand
-    • Consistent file access in both modes
-  - Interactive mode: Runs directly without piping (preserves TTY)
-  - Session capture: Limited to timestamps only (TTY requirement)
-
-* README.md:
-  - Added note about Codex TTY requirements
-  - Documented limitations for interactive vs headless modes
-  - Added blank lines around lists for markdown linting
-
-Provider Permission Models:
-
-**Claude Code CLI:**
-- Default: Prompts user for each file operation
-- Flag: `--permission-mode bypassPermissions`
-- Scope: Workspace directory (with confirmation bypass)
-- Use case: Safe for automated marking workflows
-
-**Gemini CLI:**
-- Default: Prompts user for each tool call
-- Flag: `--yolo` (auto-approve all tools)
-- Scope: Restricted to workspace directory tree only
-- Use case: Automated workflows within project boundaries
-- Note: Cannot write outside workspace (e.g., /tmp)
-
-**Codex CLI:**
-- Default: read-only sandbox (no file modifications)
-- Flag: `--sandbox workspace-write`
-- Scope: Current workspace directory tree
-- Modes: read-only, workspace-write, danger-full-access
-- Use case: Pattern Designer and file-creating agents
-- Note: Requires git repository directory
-
-Testing Results:
-
-All three providers tested and verified working:
-
-✓ **Claude Code** (headless mode):
-  - Command: `claude --print --permission-mode bypassPermissions "create file"`
-  - Result: File created successfully without prompts
-  - File access: Full workspace access with bypass
-
-✓ **Gemini CLI** (headless mode):
-  - Command: `gemini --yolo "create file"`
-  - Result: File created successfully using shell commands
-  - File access: Workspace directory only (security boundary)
-  - Note: Uses run_shell_command tool for file operations
-
-✓ **Codex CLI** (headless mode):
-  - Command: `codex exec --sandbox workspace-write "create file"`
-  - Result: File created successfully
-  - File access: Workspace directory with write permissions
-  - Note: Must be run from git repository directory
-
-Python String Formatting Gotcha:
-
-When using str.format() or f-strings, literal braces must be doubled:
-- `"A{i}"` → tries to substitute variable `i`
-- `"A{{i}}"` → renders as literal `A{i}`
-
-File Path Best Practices:
-
-When instructing LLM agents to create files:
-- ✓ Use absolute paths: `/full/path/to/file.md`
-- ✗ Use relative paths: `processed/file.md`
-
-Absolute paths ensure files are created in the correct location regardless of
-the agent's working directory.
-
-How subprocess TTY Inheritance Works:
-
-By default, subprocess.run(cmd) creates new pipes for stdin/stdout/stderr.
-With stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, the subprocess
-inherits the parent's TTY, allowing interactive CLIs to detect terminal access.
-
-Agent Types and Requirements:
-
-**Interactive Agents** (need TTY + write permissions):
-- Pattern Designer: Creates rubric and marking criteria
-  • Claude: --permission-mode bypassPermissions
-  • Gemini: --yolo
-  • Codex: --sandbox workspace-write + TTY
-- Aggregator: Compiles final grades
-  • Same requirements as Pattern Designer
-
-**Headless Agents** (automated execution):
-- Marker: Evaluates student work
-  • Uses capture_output=True
-  • Same permission flags as above
-- Normalizer: Aggregates assessments
-  • Uses capture_output=True
-  • Same permission flags as above
-- Unifier: Applies final scheme
-  • Uses capture_output=True
-  • Same permission flags as above
-
-End-to-End Testing:
-
-Before all fixes:
-✗ ./mark_structured.sh → "Error: 'i'" from KeyError
-✗ Even after template fix → "Error: stdout is not a terminal"
-✗ Even after TTY fix → Files created in wrong directory
-✗ Even after path fix → Files not created (permission denied)
-
-After all fixes:
-✓ ./mark_structured.sh → Pattern Designer launches successfully
-✓ Template renders correctly with A{i} literal braces
-✓ All providers detect TTY and run interactively
-✓ All providers have necessary write permissions
-✓ Files created at correct absolute paths
-✓ Files actually exist on disk after agent completes
-✓ Rubric validation succeeds
-✓ Workflow continues to Stage 4 (Marker Agents)
-
-Provider Comparison:
-
-| Feature | Claude Code | Gemini CLI | Codex CLI |
-|---------|-------------|------------|-----------|
-| TTY Required | No (flexible) | No (flexible) | Yes (strict) |
-| Permission Flag | --permission-mode bypassPermissions | --yolo | --sandbox workspace-write |
-| File Write Scope | Workspace (w/ bypass) | Workspace only | Workspace only |
-| Session Capture | Full (tee) | Full (tee) | Timestamps only |
-| Headless Mode | --print | Positional arg | exec subcommand |
-| Default Behavior | Prompt user | Prompt user | Read-only |
-
-User Impact:
-
-Before: Users saw cryptic errors and files weren't created
-After: All three providers work seamlessly in automated marking workflows
-
-The fix ensures that:
-1. Prompt templates format correctly without KeyError
-2. Subprocess inherits TTY for interactive agents
-3. Files created at correct absolute paths
-4. All providers have necessary permissions
-5. No manual configuration required by users
-6. Works consistently across Claude, Gemini, and Codex
-7. Rubric validation succeeds
-8. Marking workflow completes successfully
-
-New Utility - Overview Generator:
-
-Created `src/create_overview.py` - a standalone utility that generates overview.md
-files from Jupyter notebooks using LLM analysis.
+**Purpose:**
+Automatically analyze a Jupyter notebook and generate a properly formatted
+overview.md configuration file using LLM analysis.
 
 **Features:**
-- Runs separately from and before the marking workflow
-- Analyzes notebook structure, activities, and content
-- Generates properly formatted overview.md with YAML frontmatter
-- Detects assignment type (structured vs free-form) automatically
-- Places overview.md in same directory as the notebook
+- Analyzes notebook structure (cell counts, activity markers, content)
+- Detects assignment type automatically (structured vs free-form)
+- Generates comprehensive overview.md with:
+  - YAML frontmatter (provider, model, assignment type, total marks)
+  - Assignment overview and description
+  - Learning objectives (3-5 key points)
+  - Assignment structure with detected activities
+  - Grading criteria breakdown
+  - Additional notes
+- Places output file in same directory as the notebook
+- Prevents overwriting existing overview.md files
 
 **Usage:**
 ```bash
 python3 src/create_overview.py <notebook_path> --model <model_name>
 
-Examples:
-  python3 src/create_overview.py assignments/lab1/notebook.ipynb --model claude-sonnet-4-5
-  python3 src/create_overview.py notebook.ipynb --model gemini-2.5-pro
-  python3 src/create_overview.py notebook.ipynb --model gpt-5.1
+# Or using the wrapper script:
+./create_overview.sh <notebook_path> --model <model_name>
 ```
 
-**Error Handling:**
-- Exits with error if overview.md already exists (prevents overwriting)
-- Validates notebook path and file extension (.ipynb)
-- Provides clear error messages for common issues
+**Examples:**
+```bash
+python3 src/create_overview.py assignments/lab1/notebook.ipynb --model claude-sonnet-4-5
+./create_overview.sh notebook.ipynb --model gemini-2.5-pro
+./create_overview.sh notebook.ipynb --model gpt-5.1
+```
 
 **Implementation Details:**
-- Extracts notebook statistics (cell counts, activity markers)
+- Extracts notebook statistics (total cells, code cells, markdown cells)
 - Samples first few markdown cells for context
+- Detects activity markers (**[A1]**, **[A2]**, etc.) for structured assignments
 - Uses llm_caller.sh for provider-agnostic LLM calls
 - Automatically determines provider from model name prefix
-- Generates comprehensive overview including:
-  • YAML frontmatter (provider, model, assignment type, total marks)
-  • Assignment overview and description
-  • Learning objectives (3-5 key objectives)
-  • Assignment structure (structured/freeform with activity list)
-  • Grading criteria breakdown
-  • Additional notes
+- Validates input (checks file exists, is .ipynb extension)
+- Clear error messages for common issues
 
-**Testing Results:**
-✓ Help message displays correctly
-✓ Detects existing overview.md and exits with error
-✓ Successfully analyzes notebooks and extracts metadata
-✓ Generates properly formatted overview.md with all required sections
-✓ Works with all three providers (Claude, Gemini, Codex)
-✓ Places output file in correct location (notebook's directory)
+**Error Handling:**
+- Exits with error if overview.md already exists (prevents accidental overwriting)
+- Validates notebook path exists
+- Validates file extension is .ipynb
+- Provides helpful error messages
 
-Files Changed:
-- src/create_overview.py (NEW: standalone overview generator utility)
-- src/prompts/pattern_designer_structured.md (template escaping + absolute paths)
-- src/prompts/pattern_designer_freeform.md (absolute paths)
-- src/agents/pattern_designer.py (TTY inheritance + processed_dir parameter + file-moving workaround)
-- src/agents/aggregator.py (TTY inheritance)
-- src/llm_caller.sh (permission flags for all three providers + sandbox modes)
-- README.md (documentation and linting)
+## Shell Wrapper: create_overview.sh
 
-No user configuration required - all permission flags are automatically applied
-by the unified llm_caller.sh based on mode (interactive/headless) and provider.
+Created a simple bash wrapper script that:
+- Passes all arguments directly to create_overview.py
+- Uses absolute path resolution for reliability
+- Includes usage documentation in header comments
+- Executable and ready to use
+
+## Documentation Updates
+
+**README.md:**
+- Added new section "Generating overview.md Automatically"
+- Includes usage examples for all three providers
+- Explains what the utility does
+- Notes about file protection and prerequisites
+- Positioned before "For Structured Assignments" section
+
+## Testing Results
+
+✓ **Help message** displays correctly with usage examples
+✓ **Error handling** prevents overwriting existing overview.md files
+✓ **Notebook analysis** successfully extracts:
+  - Cell counts (total, code, markdown)
+  - Activity markers for structured assignments
+  - First few markdown cells for context
+✓ **LLM integration** tested with all three providers:
+  - Claude: Works correctly, creates files in subdirectories
+  - Gemini: Works correctly, creates files in subdirectories
+  - Codex: Works correctly (file-moving workaround already in place)
+✓ **Output generation** creates properly formatted overview.md
+✓ **File placement** correctly places output in notebook's directory
+✓ **Shell wrapper** works correctly, passes arguments through
+
+## Provider File Creation Capabilities
+
+Testing confirmed all three providers can create files correctly:
+
+**Claude Code:**
+- Creates files in subdirectories without issues
+- Uses Write tool natively
+- No file-moving workaround needed
+
+**Gemini CLI:**
+- Creates files in subdirectories without issues
+- Uses shell commands for file operations
+- Restricted to workspace directory (cannot write to /tmp)
+- No file-moving workaround needed
+
+**Codex CLI:**
+- May create files in project root's processed/ directory
+- File-moving workaround already implemented in pattern_designer.py
+- Workaround automatically relocates files to correct subdirectories
+
+## Files Changed
+
+- **src/create_overview.py** (NEW) - Standalone overview generator utility
+- **create_overview.sh** (NEW) - Shell wrapper script
+- **README.md** - Added documentation section with usage examples
+- **dev/COMMIT_MESSAGE.txt** - Updated (this file is rewritten for each commit)
+
+## Usage Workflow
+
+1. Create or obtain a Jupyter notebook assignment
+2. Run create_overview.py to generate overview.md:
+   ```bash
+   ./create_overview.sh assignments/lab1/notebook.ipynb --model claude-sonnet-4-5
+   ```
+3. Review and adjust the generated overview.md as needed
+4. Run the marking workflow:
+   ```bash
+   ./mark_structured.sh assignments/lab1
+   ```
+
+This utility streamlines the setup process by automatically generating the
+overview.md configuration file, which previously had to be created manually.
