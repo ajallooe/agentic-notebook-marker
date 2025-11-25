@@ -40,7 +40,7 @@ env/
 *~
 
 # LLM CLI Configs
-./.claude/
+/.claude/
 /CLAUDE.md
 /GEMINI.md
 /AGENTS.md
