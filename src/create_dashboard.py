@@ -76,10 +76,11 @@ import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from ipywidgets import interact, interactive, fixed, interact_manual, widgets
-from IPython.display import display, clear_output
 import ipywidgets as widgets
+
+from IPython.display import display, clear_output
 from pathlib import Path
+from ipywidgets import interact, interactive, fixed, interact_manual, widgets
     """))
 
     # Cell 2: Plotting setup
@@ -88,6 +89,7 @@ from pathlib import Path
 
 # Set up plotting
 %matplotlib inline
+
 plt.style.use('seaborn-v0_8-darkgrid')
 
 # Configure pandas to show all rows
