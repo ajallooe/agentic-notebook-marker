@@ -80,30 +80,30 @@ Calculate and report:
 CSV AGGREGATION REPORT
 ======================
 
-Assignment: {assignment_name}
-Date: {current_date}
+Assignment: {{assignment_name}}
+Date: {{current_date}}
 
 STATISTICS:
 -----------
-Total Students: {count}
-Mean Mark: {mean} / {total}
-Median Mark: {median} / {total}
-Std Deviation: {std}
-Highest Mark: {max} / {total}
-Lowest Mark: {min} / {total}
+Total Students: {{count}}
+Mean Mark: {{mean}} / {{total}}
+Median Mark: {{median}} / {{total}}
+Std Deviation: {{std}}
+Highest Mark: {{max}} / {{total}}
+Lowest Mark: {{min}} / {{total}}
 
 DISTRIBUTION:
 -------------
-90-100%: {count} students
-80-89%: {count} students
-70-79%: {count} students
-60-69%: {count} students
-50-59%: {count} students
-0-49%: {count} students
+90-100%: {{count}} students
+80-89%: {{count}} students
+70-79%: {{count}} students
+60-69%: {{count}} students
+50-59%: {{count}} students
+0-49%: {{count}} students
 
 WARNINGS/NOTES:
 ---------------
-{any_warnings_or_notes}
+{{any_warnings_or_notes}}
 ```
 
 ### CSV Output
@@ -125,13 +125,13 @@ DISCREPANCIES REPORT
 ====================
 
 Students in base CSV but not in feedback:
-- {student_name} - Reason: {possible_reason}
+- {{student_name}} - Reason: {{possible_reason}}
 
 Students in feedback but not in base CSV:
-- {student_name} - Action: {what_was_done}
+- {{student_name}} - Action: {{what_was_done}}
 
 Name variations handled:
-- Base CSV: "{name1}" matched to Feedback: "{name2}"
+- Base CSV: "{{name1}}" matched to Feedback: "{{name2}}"
 ```
 
 ## Example CSV Row
