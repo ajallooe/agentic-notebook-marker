@@ -207,7 +207,7 @@ The `assignments/sample-assignment/` directory contains example submissions demo
 **Orchestrators** (root directory):
 
 - `mark_structured.sh`: Main workflow for fill-in-the-blank assignments
-- `mark_freeform.sh`: Main workflow for free-form assignments (TODO)
+- `mark_freeform.sh`: Main workflow for free-form assignments
 
 ### Workflow Stages
 
@@ -280,4 +280,4 @@ To test with the sample assignment:
 ./mark_structured.sh assignments/sample-assignment
 ```
 
-Note: Agent implementations in `src/agents/` are TODO - currently placeholder scripts that need to load prompts and call LLM CLI tools.
+All agent implementations in `src/agents/` are complete and functional. Each agent loads its corresponding prompt template from `src/prompts/` and calls the appropriate LLM CLI tool via `src/llm_caller.sh`.

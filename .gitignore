@@ -41,9 +41,9 @@ env/
 
 # LLM CLI Configs
 ./.claude/
-./CLAUDE.md
-./GEMINI.md
-./AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/AGENTS.md
 
 # OS
 .DS_Store
