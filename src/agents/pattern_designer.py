@@ -135,6 +135,51 @@ def main():
             print(f"\n✗ Pattern design session ended with errors", file=sys.stderr)
             sys.exit(1)
 
+        # Workaround: Codex workspace-write may create files in project root's processed/ dir
+        # Move them to the correct assignment processed/ dir if needed
+        import shutil
+        import os
+
+        project_root = Path(__file__).parent.parent.parent
+        alt_processed = project_root / "processed"
+        target_processed = Path(args.processed_dir)
+
+        files_moved = []
+
+        if alt_processed.exists() and alt_processed != target_processed:
+            print("\nChecking for files created in alternate location...")
+
+            # Move rubric.md if exists
+            alt_rubric = alt_processed / "rubric.md"
+            if alt_rubric.exists():
+                target_rubric = target_processed / "rubric.md"
+                shutil.move(str(alt_rubric), str(target_rubric))
+                files_moved.append("rubric.md")
+                print(f"  Moved: rubric.md")
+
+            # Move activity criteria files if exist
+            alt_activities = alt_processed / "activities"
+            if alt_activities.exists():
+                target_activities = target_processed / "activities"
+                target_activities.mkdir(exist_ok=True)
+
+                for criteria_file in alt_activities.glob("A*_criteria.md"):
+                    target_file = target_activities / criteria_file.name
+                    shutil.move(str(criteria_file), str(target_file))
+                    files_moved.append(f"activities/{criteria_file.name}")
+                    print(f"  Moved: activities/{criteria_file.name}")
+
+            # Move marking_criteria.md for free-form assignments
+            alt_marking = alt_processed / "marking_criteria.md"
+            if alt_marking.exists():
+                target_marking = target_processed / "marking_criteria.md"
+                shutil.move(str(alt_marking), str(target_marking))
+                files_moved.append("marking_criteria.md")
+                print(f"  Moved: marking_criteria.md")
+
+            if files_moved:
+                print(f"\n✓ Moved {len(files_moved)} file(s) to correct location")
+
         print("\n" + "="*70)
         print("✓ Pattern design session complete")
         print("="*70)

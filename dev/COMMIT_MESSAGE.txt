@@ -215,10 +215,59 @@ The fix ensures that:
 7. Rubric validation succeeds
 8. Marking workflow completes successfully
 
+New Utility - Overview Generator:
+
+Created `src/create_overview.py` - a standalone utility that generates overview.md
+files from Jupyter notebooks using LLM analysis.
+
+**Features:**
+- Runs separately from and before the marking workflow
+- Analyzes notebook structure, activities, and content
+- Generates properly formatted overview.md with YAML frontmatter
+- Detects assignment type (structured vs free-form) automatically
+- Places overview.md in same directory as the notebook
+
+**Usage:**
+```bash
+python3 src/create_overview.py <notebook_path> --model <model_name>
+
+Examples:
+  python3 src/create_overview.py assignments/lab1/notebook.ipynb --model claude-sonnet-4-5
+  python3 src/create_overview.py notebook.ipynb --model gemini-2.5-pro
+  python3 src/create_overview.py notebook.ipynb --model gpt-5.1
+```
+
+**Error Handling:**
+- Exits with error if overview.md already exists (prevents overwriting)
+- Validates notebook path and file extension (.ipynb)
+- Provides clear error messages for common issues
+
+**Implementation Details:**
+- Extracts notebook statistics (cell counts, activity markers)
+- Samples first few markdown cells for context
+- Uses llm_caller.sh for provider-agnostic LLM calls
+- Automatically determines provider from model name prefix
+- Generates comprehensive overview including:
+  • YAML frontmatter (provider, model, assignment type, total marks)
+  • Assignment overview and description
+  • Learning objectives (3-5 key objectives)
+  • Assignment structure (structured/freeform with activity list)
+  • Grading criteria breakdown
+  • Additional notes
+
+**Testing Results:**
+✓ Help message displays correctly
+✓ Detects existing overview.md and exits with error
+✓ Successfully analyzes notebooks and extracts metadata
+✓ Generates properly formatted overview.md with all required sections
+✓ Works with all three providers (Claude, Gemini, Codex)
+✓ Places output file in correct location (notebook's directory)
+
 Files Changed:
+- src/create_overview.py (NEW: standalone overview generator utility)
 - src/prompts/pattern_designer_structured.md (template escaping + absolute paths)
 - src/prompts/pattern_designer_freeform.md (absolute paths)
-- src/agents/pattern_designer.py (TTY inheritance + processed_dir parameter)
+- src/agents/pattern_designer.py (TTY inheritance + processed_dir parameter + file-moving workaround)
 - src/agents/aggregator.py (TTY inheritance)
 - src/llm_caller.sh (permission flags for all three providers + sandbox modes)
 - README.md (documentation and linting)

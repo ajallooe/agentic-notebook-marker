@@ -84,7 +84,7 @@ For each activity `A{{i}}`, create a markdown file with:
 - Output format requirements
 - Any pre-filled code that shouldn't be changed
 
-**Output Format**: For each activity, create a separate file at the following absolute path:
+**Output Format**: For each activity, create a separate file:
 - `{processed_dir}/activities/A{{i}}_criteria.md`
 
 ### Phase 4: Final Document

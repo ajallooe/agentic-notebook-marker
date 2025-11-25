@@ -105,6 +105,46 @@ total_marks: 100
 [Your assignment description here...]
 ```
 
+## Generating overview.md Automatically
+
+You can automatically generate an `overview.md` file from an existing Jupyter notebook using the `create_overview.py` utility:
+
+```bash
+python3 src/create_overview.py <notebook_path> --model <model_name>
+```
+
+**Examples:**
+
+```bash
+# Using Claude Sonnet
+python3 src/create_overview.py assignments/lab1/notebook.ipynb --model claude-sonnet-4-5
+
+# Using Gemini
+python3 src/create_overview.py assignments/lab2/notebook.ipynb --model gemini-2.5-pro
+
+# Using Codex
+python3 src/create_overview.py assignments/lab3/notebook.ipynb --model gpt-5.1
+```
+
+**What it does:**
+
+- Analyzes the notebook structure and content
+- Detects activity markers (`**[A1]**`, `**[A2]**`, etc.) for structured assignments
+- Generates a properly formatted `overview.md` with:
+  - YAML frontmatter (provider, model, assignment type, total marks)
+  - Assignment overview and description
+  - Learning objectives
+  - Assignment structure
+  - Grading criteria
+- Places the file in the same directory as the notebook
+
+**Notes:**
+
+- The utility will not overwrite existing `overview.md` files
+- Both the notebook path and model are mandatory arguments
+- This should be run **before** the marking workflow
+- You should review and adjust the generated overview as needed
+
 ## For Structured Assignments
 
 Students complete notebooks with sections marked by:
