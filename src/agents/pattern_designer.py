@@ -77,6 +77,12 @@ def main():
         with open(args.overview, 'r') as f:
             overview_content = f.read()
 
+        # Load base notebook content if provided (structured assignments)
+        base_notebook_content = ""
+        if args.base_notebook and Path(args.base_notebook).exists():
+            with open(args.base_notebook, 'r') as f:
+                base_notebook_content = f.read()
+
         # Check for existing rubric
         rubric_file = Path(args.processed_dir) / "rubric.md"
         if rubric_file.exists():
@@ -90,6 +96,7 @@ def main():
         # Substitute variables in prompt
         prompt = prompt_template.format(
             base_notebook_path=args.base_notebook or "N/A (free-form assignment)",
+            base_notebook_content=base_notebook_content if base_notebook_content else "N/A (free-form assignment)",
             assignment_overview=overview_content,
             rubric_status=rubric_status,
             existing_rubric=existing_rubric,

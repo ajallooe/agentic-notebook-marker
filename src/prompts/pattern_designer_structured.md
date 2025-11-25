@@ -4,7 +4,13 @@ You are a **Marking Pattern Designer** for a university course. Your role is to 
 
 ## Assignment Context
 
-**Base Notebook**: `{base_notebook_path}`
+**Base Notebook Path**: `{base_notebook_path}`
+
+**Base Notebook Content**:
+```json
+{base_notebook_content}
+```
+
 **Assignment Overview**:
 ```
 {assignment_overview}
@@ -14,7 +20,7 @@ You are a **Marking Pattern Designer** for a university course. Your role is to 
 
 ### Phase 1: Analysis
 
-1. **Read the base notebook** thoroughly from start to finish
+1. **Analyze the base notebook content above** thoroughly from start to finish
 2. **Identify all activities** marked with `**[A1]**`, `**[A2]**`, etc.
 3. **For each activity**:
    - Understand what students were asked to do

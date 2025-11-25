@@ -163,6 +163,10 @@ if command -v parallel &> /dev/null && [[ $FORCE_XARGS == false ]]; then
     fi
 
     # Execute with parallel
+    if [[ $VERBOSE == true ]]; then
+        echo "" >&2  # Newline before progress starts
+    fi
+
     if [[ -n "$COMMAND" ]]; then
         cat "$TASKS_FILE" | eval "$PARALLEL_CMD" "$COMMAND" 2>&1 | grep -v '^parallel:'
     else
@@ -170,6 +174,10 @@ if command -v parallel &> /dev/null && [[ $FORCE_XARGS == false ]]; then
     fi
 
     EXIT_CODE=${PIPESTATUS[0]}
+
+    if [[ $VERBOSE == true ]]; then
+        echo "" >&2  # Newline after progress completes
+    fi
 
 elif command -v xargs &> /dev/null; then
     # Fallback to xargs with concurrency
@@ -216,8 +224,8 @@ elif command -v xargs &> /dev/null; then
             local completed=$((current + 1))
             echo "$completed" > "$PROGRESS_COUNTER"
             local percent=$((completed * 100 / TOTAL_TASKS))
-            # Clear line and show progress (goes to stderr, separate from task output)
-            printf "\r\033[K[%3d%%] Completed %d/%d tasks" "$percent" "$completed" "$TOTAL_TASKS" >&2
+            # Show progress on new line with clear separation (goes to stderr, separate from task output)
+            printf "\n[%3d%%] Completed %d/%d tasks\n\n" "$percent" "$completed" "$TOTAL_TASKS" >&2
 
             # Release lock
             rmdir "$lockdir" 2>/dev/null
@@ -236,8 +244,8 @@ elif command -v xargs &> /dev/null; then
         }
         export -f task_with_progress
 
-        # Show initial progress
-        printf "[  0%%] Completed 0/%d tasks" "$TOTAL_TASKS" >&2
+        # Show initial progress with clear separation
+        printf "\n[  0%%] Completed 0/%d tasks\n\n" "$TOTAL_TASKS" >&2
 
         if [[ -n "$COMMAND" ]]; then
             seq 1 "$TOTAL_TASKS" | xargs -P "$CONCURRENCY" -I {} bash -c 'task_with_progress "{}" "'"$TASKS_FILE"'" "'"$OUTPUT_DIR"'" "'"$COMMAND"'"' || EXIT_CODE=$?
