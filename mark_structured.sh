@@ -36,6 +36,7 @@ log_error() {
 
 # Parse arguments
 FORCE_XARGS=false
+RESUME=true  # Always resume by default
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -43,9 +44,19 @@ while [[ $# -gt 0 ]]; do
             FORCE_XARGS=true
             shift
             ;;
+        --no-resume)
+            RESUME=false
+            shift
+            ;;
+        --clean)
+            # Clean mode: remove processed directory and start fresh
+            RESUME=false
+            CLEAN_MODE=true
+            shift
+            ;;
         -*)
             echo "Unknown option: $1" >&2
-            echo "Usage: $0 <assignment_directory> [--force-xargs]" >&2
+            echo "Usage: $0 <assignment_directory> [OPTIONS]" >&2
             exit 1
             ;;
         *)
@@ -58,11 +69,13 @@ done
 
 # Check if assignment directory is provided
 if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
-    echo "Usage: $0 <assignment_directory> [--force-xargs]"
+    echo "Usage: $0 <assignment_directory> [OPTIONS]"
     echo "Example: $0 assignments/lab1"
     echo ""
     echo "Options:"
     echo "  --force-xargs    Force use of xargs instead of GNU parallel (for testing)"
+    echo "  --no-resume      Start from scratch, don't resume from previous run"
+    echo "  --clean          Remove processed directory and start fresh"
     exit 1
 fi
 
@@ -106,25 +119,42 @@ SESSIONS_DIR="$PROCESSED_DIR/sessions"
 
 mkdir -p "$ACTIVITIES_DIR" "$MARKINGS_DIR" "$NORMALIZED_DIR" "$FINAL_DIR" "$LOGS_DIR" "$SESSIONS_DIR"
 
-log_success "Directories created"
+# Clean mode: remove processed directory
+if [[ "${CLEAN_MODE:-false}" == true ]]; then
+    log_warning "Clean mode: Removing processed directory..."
+    rm -rf "$PROCESSED_DIR"
+    mkdir -p "$ACTIVITIES_DIR" "$MARKINGS_DIR" "$NORMALIZED_DIR" "$FINAL_DIR" "$LOGS_DIR" "$SESSIONS_DIR"
+    log_success "Cleaned and recreated directories"
+else
+    log_success "Directories created"
+fi
+
+# Resume mode notification
+if [[ $RESUME == true ]]; then
+    log_info "Resume mode: Will skip completed stages and tasks"
+fi
 
 # ============================================================================
 # STAGE 1: Find Submissions
 # ============================================================================
 
-log_info "Stage 1: Finding submissions..."
-
 SUBMISSIONS_MANIFEST="$PROCESSED_DIR/submissions_manifest.json"
 
-python3 "$SRC_DIR/find_submissions.py" \
-    "$SUBMISSIONS_DIR" \
-    ${BASE_FILE:+--base-file "$BASE_FILE"} \
-    --output "$SUBMISSIONS_MANIFEST" \
-    --summary
+if [[ $RESUME == true && -f "$SUBMISSIONS_MANIFEST" ]]; then
+    log_info "Stage 1: Skipping (submissions manifest already exists)"
+else
+    log_info "Stage 1: Finding submissions..."
 
-if [[ $? -ne 0 ]]; then
-    log_error "Failed to find submissions"
-    exit 1
+    python3 "$SRC_DIR/find_submissions.py" \
+        "$SUBMISSIONS_DIR" \
+        ${BASE_FILE:+--base-file "$BASE_FILE"} \
+        --output "$SUBMISSIONS_MANIFEST" \
+        --summary
+
+    if [[ $? -ne 0 ]]; then
+        log_error "Failed to find submissions"
+        exit 1
+    fi
 fi
 
 # Count submissions and activities (TODO: extract from manifest)
@@ -135,8 +165,6 @@ log_success "Found $NUM_STUDENTS student submissions"
 # STAGE 2: Extract Activities from Base Notebook
 # ============================================================================
 
-log_info "Stage 2: Analyzing base notebook structure..."
-
 # Find base notebook
 BASE_NOTEBOOK=$(find "$ASSIGNMENT_DIR" -maxdepth 1 -name "*.ipynb" -not -path "*/processed/*" | head -1)
 
@@ -145,7 +173,14 @@ if [[ -z "$BASE_NOTEBOOK" ]]; then
     exit 1
 fi
 
-log_info "Base notebook: $BASE_NOTEBOOK"
+# Check if activities already extracted
+ACTIVITIES_JSON="$PROCESSED_DIR/activities.json"
+if [[ $RESUME == true && -f "$ACTIVITIES_JSON" ]]; then
+    log_info "Stage 2: Skipping (activities already extracted)"
+else
+    log_info "Stage 2: Analyzing base notebook structure..."
+    log_info "Base notebook: $BASE_NOTEBOOK"
+fi
 
 # Extract activity structure
 python3 "$SRC_DIR/extract_activities.py" \
@@ -199,30 +234,56 @@ log_info "This will process $NUM_ACTIVITIES activities × $NUM_STUDENTS students
 MARKER_TASKS="$PROCESSED_DIR/marker_tasks.txt"
 > "$MARKER_TASKS"
 
-# Generate marker tasks
+# Generate marker tasks (one per activity per student)
+# In resume mode, skip tasks where output file already exists
 jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | while IFS='|' read -r submission_path student_name; do
     for activity in $(seq 1 $NUM_ACTIVITIES); do
-        echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$MARKINGS_DIR/${student_name}_A${activity}.md'" >> "$MARKER_TASKS"
+        output_file="$MARKINGS_DIR/${student_name}_A${activity}.md"
+
+        if [[ $RESUME == true && -f "$output_file" ]]; then
+            # Skip this task - output already exists
+            :
+        else
+            # Add task to list
+            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$output_file'" >> "$MARKER_TASKS"
+        fi
     done
 done
 
-log_info "Generated $((NUM_ACTIVITIES * NUM_STUDENTS)) marker tasks"
+# Count tasks and report
+TASKS_TO_RUN=$(wc -l < "$MARKER_TASKS" | tr -d ' ')
+EXPECTED_TOTAL=$((NUM_ACTIVITIES * NUM_STUDENTS))
 
-# Run markers in parallel
-PARALLEL_ARGS=(
-    --tasks "$MARKER_TASKS"
-    --concurrency "$MAX_PARALLEL"
-    --output-dir "$LOGS_DIR/marker_logs"
-    --verbose
-)
-
-if [[ $FORCE_XARGS == true ]]; then
-    PARALLEL_ARGS+=(--force-xargs)
+if [[ $TASKS_TO_RUN -eq 0 ]]; then
+    log_success "All $EXPECTED_TOTAL marker tasks already completed"
+else
+    if [[ $RESUME == true ]]; then
+        SKIPPED=$((EXPECTED_TOTAL - TASKS_TO_RUN))
+        log_info "Generated $TASKS_TO_RUN marker tasks (skipped $SKIPPED already completed)"
+    else
+        log_info "Generated $TASKS_TO_RUN marker tasks"
+    fi
 fi
 
-"$SRC_DIR/parallel_runner.sh" "${PARALLEL_ARGS[@]}"
+# Run markers in parallel
+if [[ $TASKS_TO_RUN -gt 0 ]]; then
+    PARALLEL_ARGS=(
+        --tasks "$MARKER_TASKS"
+        --concurrency "$MAX_PARALLEL"
+        --output-dir "$LOGS_DIR/marker_logs"
+        --verbose
+    )
 
-log_success "Marker agents completed"
+    if [[ $FORCE_XARGS == true ]]; then
+        PARALLEL_ARGS+=(--force-xargs)
+    fi
+
+    "$SRC_DIR/parallel_runner.sh" "${PARALLEL_ARGS[@]}"
+
+    log_success "Marker agents completed"
+else
+    log_info "No marker tasks to run"
+fi
 
 # ============================================================================
 # STAGE 5: Normalizer Agents (Per Activity)
@@ -231,41 +292,52 @@ log_success "Marker agents completed"
 log_info "Stage 5: Running Normalizer Agents..."
 
 for activity in $(seq 1 $NUM_ACTIVITIES); do
-    log_info "Normalizing Activity $activity..."
+    SCORING_OUTPUT="$NORMALIZED_DIR/A${activity}_scoring.md"
 
-    # TODO: Call normalizer agent with all markings for this activity
+    if [[ $RESUME == true && -f "$SCORING_OUTPUT" ]]; then
+        log_info "Activity $activity: Skipping (scoring already exists)"
+    else
+        log_info "Normalizing Activity $activity..."
 
-    log_success "Activity $activity normalized"
+        # TODO: Call normalizer agent with all markings for this activity
+
+        log_success "Activity $activity normalized"
+    fi
 done
 
 # ============================================================================
 # STAGE 6: Create Adjustment Dashboard
 # ============================================================================
 
-log_info "Stage 6: Creating adjustment dashboard..."
-
 DASHBOARD_NOTEBOOK="$PROCESSED_DIR/adjustment_dashboard.ipynb"
-
-python3 "$SRC_DIR/create_dashboard.py" \
-    "$NORMALIZED_DIR/combined_scoring.json" \
-    "$NORMALIZED_DIR/student_mappings.json" \
-    --output "$DASHBOARD_NOTEBOOK" \
-    --type structured
-
-log_success "Dashboard created: $DASHBOARD_NOTEBOOK"
-log_warning "Please open the dashboard in Jupyter and approve the marking scheme:"
-log_info "  jupyter notebook \"$DASHBOARD_NOTEBOOK\""
-log_info ""
-read -p "Press Enter when you have saved the approved scheme..."
-
-# Verify approved scheme exists
 APPROVED_SCHEME="$PROCESSED_DIR/approved_scheme.json"
-if [[ ! -f "$APPROVED_SCHEME" ]]; then
-    log_error "Approved scheme not found. Please run the dashboard and save the scheme."
-    exit 1
-fi
 
-log_success "Approved scheme loaded"
+if [[ $RESUME == true && -f "$APPROVED_SCHEME" ]]; then
+    log_info "Stage 6: Skipping (approved scheme already exists)"
+    log_success "Approved scheme loaded: $APPROVED_SCHEME"
+else
+    log_info "Stage 6: Creating adjustment dashboard..."
+
+    python3 "$SRC_DIR/create_dashboard.py" \
+        "$NORMALIZED_DIR/combined_scoring.json" \
+        "$NORMALIZED_DIR/student_mappings.json" \
+        --output "$DASHBOARD_NOTEBOOK" \
+        --type structured
+
+    log_success "Dashboard created: $DASHBOARD_NOTEBOOK"
+    log_warning "Please open the dashboard in Jupyter and approve the marking scheme:"
+    log_info "  jupyter notebook \"$DASHBOARD_NOTEBOOK\""
+    log_info ""
+    read -p "Press Enter when you have saved the approved scheme..."
+
+    # Verify approved scheme exists
+    if [[ ! -f "$APPROVED_SCHEME" ]]; then
+        log_error "Approved scheme not found. Please run the dashboard and save the scheme."
+        exit 1
+    fi
+
+    log_success "Approved scheme loaded"
+fi
 
 # ============================================================================
 # STAGE 7: Unifier Agents (Parallel)
@@ -277,49 +349,80 @@ log_info "Stage 7: Running Unifier Agents (Parallel)..."
 UNIFIER_TASKS="$PROCESSED_DIR/unifier_tasks.txt"
 > "$UNIFIER_TASKS"
 
+# Generate unifier tasks (one per student)
+# In resume mode, skip tasks where output file already exists
 jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | while IFS='|' read -r submission_path student_name; do
-    echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --output '$FINAL_DIR/${student_name}_feedback.md'" >> "$UNIFIER_TASKS"
+    output_file="$FINAL_DIR/${student_name}_feedback.md"
+
+    if [[ $RESUME == true && -f "$output_file" ]]; then
+        # Skip this task - output already exists
+        :
+    else
+        # Add task to list
+        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --output '$output_file'" >> "$UNIFIER_TASKS"
+    fi
 done
 
-UNIFIER_ARGS=(
-    --tasks "$UNIFIER_TASKS"
-    --concurrency "$MAX_PARALLEL"
-    --output-dir "$LOGS_DIR/unifier_logs"
-    --verbose
-)
+# Count tasks and report
+UNIFIER_TASKS_TO_RUN=$(wc -l < "$UNIFIER_TASKS" | tr -d ' ')
 
-if [[ $FORCE_XARGS == true ]]; then
-    UNIFIER_ARGS+=(--force-xargs)
+if [[ $UNIFIER_TASKS_TO_RUN -eq 0 ]]; then
+    log_success "All $NUM_STUDENTS unifier tasks already completed"
+else
+    if [[ $RESUME == true ]]; then
+        UNIFIER_SKIPPED=$((NUM_STUDENTS - UNIFIER_TASKS_TO_RUN))
+        log_info "Generated $UNIFIER_TASKS_TO_RUN unifier tasks (skipped $UNIFIER_SKIPPED already completed)"
+    else
+        log_info "Generated $UNIFIER_TASKS_TO_RUN unifier tasks"
+    fi
+
+    UNIFIER_ARGS=(
+        --tasks "$UNIFIER_TASKS"
+        --concurrency "$MAX_PARALLEL"
+        --output-dir "$LOGS_DIR/unifier_logs"
+        --verbose
+    )
+
+    if [[ $FORCE_XARGS == true ]]; then
+        UNIFIER_ARGS+=(--force-xargs)
+    fi
+
+    "$SRC_DIR/parallel_runner.sh" "${UNIFIER_ARGS[@]}"
+
+    log_success "Unifier agents completed"
 fi
-
-"$SRC_DIR/parallel_runner.sh" "${UNIFIER_ARGS[@]}"
-
-log_success "Unifier agents completed"
 
 # ============================================================================
 # STAGE 8: Aggregator Agent (Interactive)
 # ============================================================================
 
-log_info "Stage 8: Running Aggregator Agent (Interactive)..."
+GRADES_CSV="$FINAL_DIR/grades.csv"
 
-AGGREGATOR_SESSION="$SESSIONS_DIR/aggregator.log"
+if [[ $RESUME == true && -f "$GRADES_CSV" ]]; then
+    log_info "Stage 8: Skipping (grades already generated)"
+    log_success "Grades CSV: $GRADES_CSV"
+else
+    log_info "Stage 8: Running Aggregator Agent (Interactive)..."
 
-python3 "$SRC_DIR/agents/aggregator.py" \
-    --assignment-name "$ASSIGNMENT_NAME" \
-    --feedback-dir "$FINAL_DIR" \
-    --output-dir "$FINAL_DIR" \
-    --session-log "$AGGREGATOR_SESSION" \
-    --provider "$DEFAULT_PROVIDER" \
-    ${DEFAULT_MODEL:+--model "$DEFAULT_MODEL"} \
-    --type structured \
-    --total-marks "$TOTAL_MARKS"
+    AGGREGATOR_SESSION="$SESSIONS_DIR/aggregator.log"
 
-if [[ $? -ne 0 ]]; then
-    log_error "Aggregator failed"
-    exit 1
+    python3 "$SRC_DIR/agents/aggregator.py" \
+        --assignment-name "$ASSIGNMENT_NAME" \
+        --feedback-dir "$FINAL_DIR" \
+        --output-dir "$FINAL_DIR" \
+        --session-log "$AGGREGATOR_SESSION" \
+        --provider "$DEFAULT_PROVIDER" \
+        ${DEFAULT_MODEL:+--model "$DEFAULT_MODEL"} \
+        --type structured \
+        --total-marks "$TOTAL_MARKS"
+
+    if [[ $? -ne 0 ]]; then
+        log_error "Aggregator failed"
+        exit 1
+    fi
+
+    log_success "Aggregation complete"
 fi
-
-log_success "Aggregation complete"
 
 # ============================================================================
 # FINAL SUMMARY
