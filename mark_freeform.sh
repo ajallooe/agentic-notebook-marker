@@ -34,14 +34,37 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Parse arguments
+FORCE_XARGS=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force-xargs)
+            FORCE_XARGS=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            echo "Usage: $0 <assignment_directory> [--force-xargs]" >&2
+            exit 1
+            ;;
+        *)
+            # First positional argument is the assignment directory
+            ASSIGNMENT_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
 # Check if assignment directory is provided
-if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <assignment_directory>"
+if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
+    echo "Usage: $0 <assignment_directory> [--force-xargs]"
     echo "Example: $0 assignments/project1"
+    echo ""
+    echo "Options:"
+    echo "  --force-xargs    Force use of xargs instead of GNU parallel (for testing)"
     exit 1
 fi
-
-ASSIGNMENT_DIR="$1"
 
 # Validate assignment directory
 if [[ ! -d "$ASSIGNMENT_DIR" ]]; then
@@ -160,11 +183,18 @@ done
 log_info "Generated $NUM_STUDENTS marker tasks"
 
 # Run markers in parallel
-"$SRC_DIR/parallel_runner.sh" \
-    --tasks "$MARKER_TASKS" \
-    --concurrency "$MAX_PARALLEL" \
-    --output-dir "$LOGS_DIR/marker_logs" \
+PARALLEL_ARGS=(
+    --tasks "$MARKER_TASKS"
+    --concurrency "$MAX_PARALLEL"
+    --output-dir "$LOGS_DIR/marker_logs"
     --verbose
+)
+
+if [[ $FORCE_XARGS == true ]]; then
+    PARALLEL_ARGS+=(--force-xargs)
+fi
+
+"$SRC_DIR/parallel_runner.sh" "${PARALLEL_ARGS[@]}"
 
 log_success "Marker agents completed"
 
@@ -232,11 +262,18 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
     echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$FINAL_DIR/${student_name}_feedback.md' --type freeform" >> "$UNIFIER_TASKS"
 done
 
-"$SRC_DIR/parallel_runner.sh" \
-    --tasks "$UNIFIER_TASKS" \
-    --concurrency "$MAX_PARALLEL" \
-    --output-dir "$LOGS_DIR/unifier_logs" \
+UNIFIER_ARGS=(
+    --tasks "$UNIFIER_TASKS"
+    --concurrency "$MAX_PARALLEL"
+    --output-dir "$LOGS_DIR/unifier_logs"
     --verbose
+)
+
+if [[ $FORCE_XARGS == true ]]; then
+    UNIFIER_ARGS+=(--force-xargs)
+fi
+
+"$SRC_DIR/parallel_runner.sh" "${UNIFIER_ARGS[@]}"
 
 log_success "Unifier agents completed"
 

@@ -269,6 +269,17 @@ The xargs implementation uses a line-number approach to avoid command-line lengt
 - Avoids ARG_MAX errors when processing hundreds of tasks with long file paths
 - Critical for large structured assignments (e.g., 7 activities × 32 students = 224 tasks)
 
+**Testing xargs (Debug Option)**:
+
+To force xargs usage even when GNU parallel is available (useful for testing):
+```bash
+./mark_structured.sh assignments/lab1 --force-xargs
+./mark_freeform.sh assignments/project1 --force-xargs
+```
+
+This bypasses parallel detection and uses xargs, allowing verification that the
+ARG_MAX fix works correctly.
+
 ### CLI Tool Integration
 
 The system uses CLI tools, NOT API calls:

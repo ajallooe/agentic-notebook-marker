@@ -1,122 +1,102 @@
-Fix xargs ARG_MAX issue in parallel_runner.sh for large task lists
+Add --force-xargs debug option to test xargs fallback path
 
-Fixed "command line cannot be assembled, too long" error when running marker
-agents with many tasks (e.g., 224 tasks = 7 activities × 32 students).
+Added a debug option to force the use of xargs even when GNU parallel is
+available. This ensures the xargs ARG_MAX fix can be tested properly.
 
 ## Problem
 
-When processing structured assignments with many students and activities, the
-parallel_runner.sh script failed with:
-
-```
-xargs: command line cannot be assembled, too long
-```
-
-This occurred because xargs was trying to pass very long command lines (with
-paths containing spaces) as arguments, exceeding the system's ARG_MAX limit.
-
-## Root Cause
-
-The original xargs implementation used `-I {}` to substitute entire command
-lines into the bash command template:
-
-```bash
-cat "$TASKS_FILE" | xargs -I {} bash -c "execute_task \"{}\" ..."
-```
-
-For 224 tasks, each containing paths like:
-```
-python3 '/Volumes/Mac Storage/.../file.py' --arg '/Volumes/Mac Storage/.../file.ipynb' ...
-```
-
-The assembled command line exceeded ARG_MAX (typically 256KB on macOS).
+With GNU parallel now installed, there's no way to test that the xargs
+fallback path works correctly with the new ARG_MAX fix. Need a way to force
+xargs usage for testing purposes.
 
 ## Solution
 
-Instead of passing command lines through xargs arguments, the new approach:
+Added `--force-xargs` flag that can be passed to marking scripts:
 
-1. **Passes line numbers** (1, 2, 3, ... N) through xargs
-2. **Reads commands from file** using `sed -n "${line_num}p"` inside each worker
-3. **Avoids ARG_MAX** entirely since line numbers are small integers
-
-**Before:**
 ```bash
-cat tasks.txt | xargs -I {} bash -c "execute_task \"{}\" ..."
-# Passes long commands through xargs ’ ARG_MAX error
+./mark_structured.sh assignments/lab1 --force-xargs
+./mark_freeform.sh assignments/project1 --force-xargs
 ```
 
-**After:**
-```bash
-seq 1 N | xargs -I {} bash -c 'execute_task_by_line "{}" "tasks.txt" ...'
-# Passes only line numbers through xargs ’ no ARG_MAX issues
-```
+This flag:
+- Skips GNU parallel even if available
+- Forces use of xargs with the line-number approach
+- Displays clear message: "Using xargs for task execution (forced via --force-xargs)"
+- Enables testing xargs behavior with large task lists
 
 ## Implementation
 
 **src/parallel_runner.sh:**
+- Added `--force-xargs` flag to argument parser
+- Modified parallel detection: `if command -v parallel && [[ $FORCE_XARGS == false ]]`
+- Added conditional message for forced xargs mode
+- Flag completely bypasses parallel, even if available
 
-- Added `execute_task_by_line()` function that:
-  - Takes line number and tasks file path
-  - Uses `sed -n "${line_num}p"` to read specific line
-  - Calls original `execute_task()` with the command
+**mark_structured.sh:**
+- Added argument parsing to accept `--force-xargs`
+- Passes flag through to both parallel_runner.sh calls (markers and unifiers)
+- Updated usage message to show new option
 
-- Modified xargs execution to:
-  - Generate line numbers with `seq 1 $TOTAL_TASKS`
-  - Pass numbers through xargs instead of command lines
-  - Call wrapper function that reads from file
+**mark_freeform.sh:**
+- Same changes as mark_structured.sh
+- Consistent interface across both marking workflows
 
-**Benefits:**
-- Handles arbitrarily large task lists (thousands of tasks)
-- Works with paths containing spaces and special characters
-- No ARG_MAX limitations
-- Maintains parallel execution capabilities
-- Same performance as before
+## Usage Examples
+
+**Normal execution (uses parallel if available):**
+```bash
+./mark_structured.sh assignments/lab1
+```
+
+**Force xargs for testing:**
+```bash
+./mark_structured.sh assignments/lab1 --force-xargs
+```
+
+**Output when forced:**
+```
+Parallel Task Runner
+====================
+Tasks file: /path/to/tasks.txt
+Total tasks: 224
+Concurrency: 4
+
+Using xargs for task execution (forced via --force-xargs)
+```
 
 ## Testing
 
-**Test 1: Small task list**
-```bash
-# 4 tasks with 2 concurrent workers
- All 4 tasks completed successfully
- Parallel execution confirmed (task 2 and 1 ran simultaneously)
-```
-
-**Test 2: Line number approach**
-```bash
-# Verified sed correctly reads specific lines
- Line 1: echo "Task 1"
- Line 2: echo "Task 2 with spaces"
- Line 3: echo "Task 3"
-```
-
-**Expected for production:**
-- 224 tasks (7 activities × 32 students) should now process without errors
-- 4 concurrent workers as configured in overview.md
-- Progress through all marker agents successfully
+âœ“ **Flag parsing** works in both marking scripts
+âœ“ **Help message** displays --force-xargs option
+âœ“ **Force mode** bypasses parallel and uses xargs
+âœ“ **Message** clearly indicates forced mode
+âœ“ **Execution** works correctly with 3 tasks in parallel
+âœ“ **Passthrough** works for both marker and unifier stages
 
 ## Files Changed
 
 - **src/parallel_runner.sh**:
-  - Added `execute_task_by_line()` wrapper function
-  - Modified xargs section to use line numbers instead of command lines
-  - Updated comments to explain ARG_MAX avoidance strategy
-  - Exported new function for use in subshells
+  - Added `FORCE_XARGS=false` default
+  - Added `--force-xargs` to argument parser
+  - Modified parallel availability check
+  - Added conditional message for forced mode
 
-## Compatibility
+- **mark_structured.sh**:
+  - Added argument parsing with `--force-xargs` support
+  - Updated usage message
+  - Pass flag to parallel_runner.sh for both stages
 
-- Works with both GNU xargs and BSD xargs (macOS)
-- Uses standard `seq` and `sed` commands (available on all Unix systems)
-- Falls back gracefully to sequential execution if xargs unavailable
-- GNU parallel path remains unchanged (preferred when available)
+- **mark_freeform.sh**:
+  - Same changes as mark_structured.sh
+  - Consistent interface
 
-## Impact
+## Benefits
 
-This fix enables the marking workflow to process large assignments with hundreds
-of submissions without hitting command-line length limits. The workflow can now:
+- **Testing**: Can verify xargs ARG_MAX fix works with large task lists
+- **Debugging**: Helps isolate issues between parallel and xargs implementations
+- **Verification**: Ensures fallback path remains functional
+- **Development**: Useful for testing without uninstalling parallel
 
-1.  Complete Pattern Designer stage (already working)
-2.  Process 224 marker agent tasks in parallel (now fixed)
-3. ’ Continue to Normalizer stage
-4. ’ Complete full marking workflow
-
-The fix is transparent to users and requires no configuration changes.
+This is a development/testing feature that doesn't affect normal operations.
+Users can continue using the default behavior (automatic parallel/xargs detection)
+while developers can force specific execution paths for testing.

@@ -12,6 +12,7 @@ CONCURRENCY=4
 OUTPUT_DIR=""
 COMMAND=""
 VERBOSE=false
+FORCE_XARGS=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -34,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --verbose|-v)
             VERBOSE=true
+            shift
+            ;;
+        --force-xargs)
+            FORCE_XARGS=true
             shift
             ;;
         *)
@@ -135,7 +140,7 @@ export -f execute_task
 export -f execute_task_by_line
 
 # Check if GNU parallel is available
-if command -v parallel &> /dev/null; then
+if command -v parallel &> /dev/null && [[ $FORCE_XARGS == false ]]; then
     # Use GNU parallel for better progress tracking
     if [[ $VERBOSE == true ]]; then
         echo "Using GNU parallel for task execution"
@@ -168,7 +173,11 @@ if command -v parallel &> /dev/null; then
 elif command -v xargs &> /dev/null; then
     # Fallback to xargs with concurrency
     if [[ $VERBOSE == true ]]; then
-        echo "Using xargs for task execution (install GNU parallel for better features)"
+        if [[ $FORCE_XARGS == true ]]; then
+            echo "Using xargs for task execution (forced via --force-xargs)"
+        else
+            echo "Using xargs for task execution (install GNU parallel for better features)"
+        fi
         echo ""
     fi
 
