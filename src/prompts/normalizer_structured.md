@@ -10,8 +10,8 @@ Review all marker agent assessments for this activity across all students, ident
 
 **IMPORTANT**: You MUST use standardized IDs for all mistakes and positives:
 
-- **Mistake IDs**: Use ONLY `M1`, `M2`, `M3`, `M4`, etc. (sequential numbers starting from 1)
-- **Positive IDs**: Use ONLY `P1`, `P2`, `P3`, `P4`, etc. (sequential numbers starting from 1)
+- **Mistake IDs**: Use ONLY `M001`, `M002`, `M003`, etc. (3-digit zero-padded sequential numbers)
+- **Positive IDs**: Use ONLY `P001`, `P002`, `P003`, etc. (3-digit zero-padded sequential numbers)
 
 **DO NOT** use descriptive names as IDs. Examples of INCORRECT IDs:
 - ❌ `Missing 'random_state'`
@@ -19,11 +19,27 @@ Review all marker agent assessments for this activity across all students, ident
 - ❌ `Lack of Parameterization`
 
 **CORRECT format**:
-- ✅ `M1` with description "Missing 'random_state'"
-- ✅ `M2` with description "Incomplete Implementation"
-- ✅ `P1` with description "Excellent use of stratification"
+- ✅ `M001` with description "The implementation did not include random_state parameter."
+- ✅ `M002` with description "There were critical implementation failures in the core logic."
+- ✅ `P001` with description "Student demonstrated excellent use of stratification techniques."
 
-The ID column must contain ONLY `M1`-`M99` or `P1`-`P99` format.
+The ID column must contain ONLY `M001`-`M999` or `P001`-`P999` format.
+
+## Description Style Guidelines
+
+**IMPORTANT**: Write descriptions as **short sentences**, NOT titles or labels:
+
+**INCORRECT (title-style)**:
+- ❌ "Missing random_state Parameter"
+- ❌ "Critical Implementation Failure"
+- ❌ "Excellent Stratification Usage"
+
+**CORRECT (sentence-style)**:
+- ✅ "The student did not include the random_state parameter."
+- ✅ "There were critical implementation failures in the core logic."
+- ✅ "Student demonstrated excellent use of stratification techniques."
+
+Use complete sentences with proper grammar, capitalization, and punctuation.
 
 ## Input Data
 

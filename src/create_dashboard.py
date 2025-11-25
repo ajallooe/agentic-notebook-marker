@@ -191,6 +191,8 @@ Use the sliders below to adjust deductions and bonuses. The distribution will up
 
 # Create adjustment widgets for mistakes
 mistake_widgets = {}
+mistake_checkboxes = {}
+
 for _, mistake in mistakes_df.iterrows():
     mistake_id = mistake['id']
     description = mistake['description']
@@ -204,6 +206,15 @@ for _, mistake in mistakes_df.iterrows():
     # Create label with activity context
     label = f"{mistake_id} ({activity_total}marks): {desc_short}"
 
+    # Create checkbox (checked by default)
+    mistake_checkboxes[mistake_id] = widgets.Checkbox(
+        value=True,
+        description='Include in feedback',
+        indent=False,
+        layout=widgets.Layout(width='200px')
+    )
+
+    # Create slider
     mistake_widgets[mistake_id] = widgets.FloatSlider(
         value=suggested,
         min=0,
@@ -211,15 +222,15 @@ for _, mistake in mistakes_df.iterrows():
         step=0.5,
         description=mistake_id,
         style={'description_width': '120px'},
-        layout=widgets.Layout(width='800px'),
+        layout=widgets.Layout(width='600px'),
         continuous_update=False
     )
 
-    # Display with full label
+    # Display: label, checkbox, and slider in a row
     display(widgets.HTML(f"<b>{label}</b>"))
-    display(mistake_widgets[mistake_id])
+    display(widgets.HBox([mistake_checkboxes[mistake_id], mistake_widgets[mistake_id]]))
 
-print(f"\\n✓ Created {len(mistake_widgets)} mistake adjustment sliders")
+print(f"\\n✓ Created {len(mistake_widgets)} mistake adjustment sliders with checkboxes")
     """))
 
     notebook["cells"].append(_code_cell("""
@@ -227,6 +238,8 @@ print(f"\\n✓ Created {len(mistake_widgets)} mistake adjustment sliders")
 
 # Create adjustment widgets for positives
 positive_widgets = {}
+positive_checkboxes = {}
+
 for _, positive in positives_df.iterrows():
     positive_id = positive['id']
     description = positive['description']
@@ -240,6 +253,15 @@ for _, positive in positives_df.iterrows():
     # Create label with activity context
     label = f"{positive_id} ({activity_total}marks): {desc_short}"
 
+    # Create checkbox (checked by default)
+    positive_checkboxes[positive_id] = widgets.Checkbox(
+        value=True,
+        description='Include in feedback',
+        indent=False,
+        layout=widgets.Layout(width='200px')
+    )
+
+    # Create slider
     positive_widgets[positive_id] = widgets.FloatSlider(
         value=suggested,
         min=0,
@@ -247,22 +269,22 @@ for _, positive in positives_df.iterrows():
         step=0.5,
         description=positive_id,
         style={'description_width': '120px'},
-        layout=widgets.Layout(width='800px'),
+        layout=widgets.Layout(width='600px'),
         continuous_update=False
     )
 
-    # Display with full label
+    # Display: label, checkbox, and slider in a row
     display(widgets.HTML(f"<b>{label}</b>"))
-    display(positive_widgets[positive_id])
+    display(widgets.HBox([positive_checkboxes[positive_id], positive_widgets[positive_id]]))
 
-print(f"\\n✓ Created {len(positive_widgets)} positive adjustment sliders")
+print(f"\\n✓ Created {len(positive_widgets)} positive adjustment sliders with checkboxes")
     """))
 
     # Calculation function
     notebook["cells"].append(_code_cell("""
 # @title Define Mark Calculation Functions
 
-def calculate_marks(**kwargs):
+def calculate_marks(mistake_vals, positive_vals, mistake_checks, positive_checks):
     \"\"\"Calculate marks for all students based on current adjustments.\"\"\"
     marks = {}
 
@@ -272,15 +294,15 @@ def calculate_marks(**kwargs):
     for student_name, mapping in student_data.items():
         student_mark = total_marks
 
-        # Apply mistake deductions
+        # Apply mistake deductions (only if checkbox is enabled)
         for mistake_id in mapping.get('mistakes', []):
-            if mistake_id in kwargs:
-                student_mark -= kwargs[mistake_id]
+            if mistake_id in mistake_vals and mistake_checks.get(mistake_id, True):
+                student_mark -= mistake_vals[mistake_id]
 
-        # Apply positive bonuses
+        # Apply positive bonuses (only if checkbox is enabled)
         for positive_id in mapping.get('positives', []):
-            if positive_id in kwargs:
-                student_mark += kwargs[positive_id]
+            if positive_id in positive_vals and positive_checks.get(positive_id, True):
+                student_mark += positive_vals[positive_id]
 
         # Clamp to valid range
         student_mark = max(0, min(total_marks, student_mark))
@@ -337,10 +359,16 @@ def plot_distribution(marks_dict):
         percentage = (count/len(marks)*100) if len(marks) > 0 else 0
         print(f"  {band}: {count} students ({percentage:.1f}%)")
 
-def update_display(**kwargs):
+def update_display():
     \"\"\"Update marks and distribution based on current widget values.\"\"\"
     clear_output(wait=True)
-    marks = calculate_marks(**kwargs)
+    # Collect slider values
+    mistake_vals = {k: w.value for k, w in mistake_widgets.items()}
+    positive_vals = {k: w.value for k, w in positive_widgets.items()}
+    # Collect checkbox states
+    mistake_checks = {k: w.value for k, w in mistake_checkboxes.items()}
+    positive_checks = {k: w.value for k, w in positive_checkboxes.items()}
+    marks = calculate_marks(mistake_vals, positive_vals, mistake_checks, positive_checks)
     plot_distribution(marks)
     return marks
 
@@ -367,8 +395,7 @@ output = widgets.Output()
 
 def on_update_click(b):
     with output:
-        kwargs = {k: w.value for k, w in {**mistake_widgets, **positive_widgets}.items()}
-        current_marks = update_display(**kwargs)
+        current_marks = update_display()
 
 update_button.on_click(on_update_click)
 display(update_button)
@@ -376,8 +403,7 @@ display(output)
 
 # Initial display
 with output:
-    kwargs = {k: w.value for k, w in {**mistake_widgets, **positive_widgets}.items()}
-    current_marks = update_display(**kwargs)
+    current_marks = update_display()
     """))
 
     # Save scheme cell
@@ -397,21 +423,32 @@ def save_approved_scheme(output_path='approved_scheme.json'):
         'activity_marks': activity_marks,
         'mistakes': {},
         'positives': {},
+        'excluded_mistakes': [],
+        'excluded_positives': [],
         'timestamp': pd.Timestamp.now().isoformat()
     }
 
+    # Only include items where checkbox is enabled
     for mistake_id, widget in mistake_widgets.items():
-        scheme['mistakes'][mistake_id] = float(widget.value)
+        if mistake_checkboxes[mistake_id].value:
+            scheme['mistakes'][mistake_id] = float(widget.value)
+        else:
+            scheme['excluded_mistakes'].append(mistake_id)
 
     for positive_id, widget in positive_widgets.items():
-        scheme['positives'][positive_id] = float(widget.value)
+        if positive_checkboxes[positive_id].value:
+            scheme['positives'][positive_id] = float(widget.value)
+        else:
+            scheme['excluded_positives'].append(positive_id)
 
     with open(output_path, 'w') as f:
         json.dump(scheme, f, indent=2)
 
     print(f"✓ Approved scheme saved to: {output_path}")
-    print(f"  - {len(scheme['mistakes'])} mistake deductions")
-    print(f"  - {len(scheme['positives'])} positive bonuses")
+    print(f"  - {len(scheme['mistakes'])} mistake deductions (included)")
+    print(f"  - {len(scheme['excluded_mistakes'])} mistakes excluded from feedback")
+    print(f"  - {len(scheme['positives'])} positive bonuses (included)")
+    print(f"  - {len(scheme['excluded_positives'])} positives excluded from feedback")
     print(f"\\nYou may now close this notebook and continue the marking process.")
 
     return scheme
