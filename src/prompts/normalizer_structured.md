@@ -6,6 +6,25 @@ You are a **Normalizer Agent** responsible for aggregating marking assessments a
 
 Review all marker agent assessments for this activity across all students, identify common patterns, and create a unified scoring scheme with severity ratings.
 
+## CRITICAL: ID Naming Convention
+
+**IMPORTANT**: You MUST use standardized IDs for all mistakes and positives:
+
+- **Mistake IDs**: Use ONLY `M1`, `M2`, `M3`, `M4`, etc. (sequential numbers starting from 1)
+- **Positive IDs**: Use ONLY `P1`, `P2`, `P3`, `P4`, etc. (sequential numbers starting from 1)
+
+**DO NOT** use descriptive names as IDs. Examples of INCORRECT IDs:
+- ❌ `Missing 'random_state'`
+- ❌ `Incomplete Implementation`
+- ❌ `Lack of Parameterization`
+
+**CORRECT format**:
+- ✅ `M1` with description "Missing 'random_state'"
+- ✅ `M2` with description "Incomplete Implementation"
+- ✅ `P1` with description "Excellent use of stratification"
+
+The ID column must contain ONLY `M1`-`M99` or `P1`-`P99` format.
+
 ## Input Data
 
 You have access to {num_students} marker assessments for Activity {activity_id}:
