@@ -13,15 +13,17 @@ Evaluate the student's work **qualitatively** - identify mistakes and positive p
 ## Student Information
 
 **Student Name**: {student_name}
-**Submission**: {submission_path}
+**Submission Path** (for reference only): {submission_path}
 
 ## Student's Complete Notebook
+
+**IMPORTANT**: The student's complete notebook is provided below. You have all the information you need - do NOT attempt to read any files.
 
 {student_notebook}
 
 ## Your Tasks
 
-Carefully review the entire notebook and provide a comprehensive structured assessment.
+Carefully review the entire notebook above and provide a comprehensive structured assessment.
 
 ### 1. Requirements Coverage
 - Did the student address all requirements from the assignment description?

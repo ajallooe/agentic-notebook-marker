@@ -41,19 +41,22 @@ The marking scripts automatically resume from where they left off by default. If
 ./mark_structured.sh assignments/your-assignment-name --clean
 ```
 
-**What gets preserved:**
+**What gets preserved**:
+
 - Completed stages (e.g., submission discovery, activity extraction)
 - Completed marker tasks (e.g., 196 out of 224 students already marked)
 - Completed normalizer outputs
 - Approved marking schemes
 - Generated feedback files
 
-**When to use each option:**
+**When to use each option**:
+
 - **Default (resume)**: When errors occur mid-process or you want to continue after stopping
 - **`--no-resume`**: When you want to regenerate everything from existing processed files
 - **`--clean`**: When you want to completely start over (deletes `processed/` directory)
 
-**Example: Recovering from errors**
+**Example**: Recovering from errors
+
 ```bash
 # First run - processes 196/224 students before error
 ./mark_structured.sh assignments/lab1
@@ -126,12 +129,14 @@ max_parallel: 4             # Number of parallel tasks
 verbose: true               # Enable detailed logging
 ```
 
-**Configuration hierarchy:**
+**Configuration hierarchy**:
+
 1. **Assignment-specific** (`assignments/*/overview.md`) - highest priority
 2. **System-wide** (`config.yaml`) - fallback defaults
 3. **Hardcoded fallbacks** - if config.yaml is missing
 
-**Example:**
+**Example**:
+
 ```yaml
 # config.yaml - your preferred defaults
 default_provider: codex
@@ -194,7 +199,7 @@ You can automatically generate an `overview.md` file from an existing Jupyter no
 python3 src/create_overview.py <notebook_path> --model <model_name>
 ```
 
-**Examples:**
+**Examples**:
 
 ```bash
 # Using Claude Sonnet
@@ -207,7 +212,7 @@ python3 src/create_overview.py <notebook_path> --model <model_name>
 ./create_overview.sh assignments/lab3/notebook.ipynb --model gpt-5.1
 ```
 
-**What it does:**
+**What it does**:
 
 - Analyzes the notebook structure and content
 - Detects activity markers (`**[A1]**`, `**[A2]**`, etc.) for structured assignments
@@ -219,7 +224,7 @@ python3 src/create_overview.py <notebook_path> --model <model_name>
   - Grading criteria
 - Places the file in the same directory as the notebook
 
-**Notes:**
+**Notes**:
 
 - The utility will not overwrite existing `overview.md` files
 - Both the notebook path and model are mandatory arguments
@@ -259,16 +264,19 @@ The system maintains state in `processed/logs/state.json`:
 
 The system provides clear, real-time progress tracking during parallel execution:
 
-**With GNU parallel (recommended):**
+**With GNU parallel (recommended)**:
+
 - Visual progress bar with percentage and ETA
 - Clean, easy-to-read format
 
-**With xargs (fallback):**
+**With xargs (fallback)**:
+
 ```text
 [ 45%] Completed 100/224 tasks
 ```
 
 Progress updates show:
+
 - Current percentage complete
 - Number of tasks completed vs. total
 - Updates in real-time as tasks finish
@@ -305,7 +313,7 @@ Adjust `max_parallel` in `overview.md` to control concurrency:
 - Unifier agents: One per student
 - Recommendation: Set to number of CPU cores
 
-**Execution Methods:**
+**Execution Methods**:
 
 - **GNU parallel** (recommended): Install with `brew install parallel` on macOS or `apt install parallel` on Linux
 - **xargs** (fallback): Built into all Unix systems, automatically used if parallel not available
@@ -327,13 +335,13 @@ The system supports multiple providers via CLI:
 
 Command: `claude`
 
-**Supported Models:**
+**Supported Models**:
 
 - `claude-sonnet-4-5` - Latest Sonnet (balanced performance and cost)
 - `claude-opus-4-5` - Most capable model (slower, more expensive)
 - `claude-haiku-4-5` - Fastest model (lower cost)
 
-**Model Aliases:**
+**Model Aliases**:
 
 - `sonnet` → `claude-sonnet-4-5`
 - `opus` → `claude-opus-4-5`
@@ -343,25 +351,25 @@ Command: `claude`
 
 Command: `gemini`
 
-**Supported Models:**
+**Supported Models**:
 
 - `gemini-2.5-pro` - Most capable Gemini model
 - `gemini-2.5-flash` - Fast and efficient
 - `gemini-2.0-flash` - Legacy model (still supported)
 
-**Note:** Model availability depends on your Gemini CLI version and API access.
+**Note**: Model availability depends on your Gemini CLI version and API access.
 
 #### Codex/OpenAI Provider
 
 Command: `codex`
 
-**Supported Models:**
+**Supported Models**:
 
 - `gpt-5.1` - Latest GPT model
 - `gpt-5.1-codex-max` - Maximum reasoning capability
 - `gpt-5.1-codex-mini` - Faster, cost-effective
 
-**Important:** Codex CLI requires a real terminal (TTY) for interactive mode. When using Codex:
+**Important**: Codex CLI requires a real terminal (TTY) for interactive mode. When using Codex:
 
 - Interactive agents (Pattern Designer, Aggregator) require running from a real terminal
 - Headless agents (Marker, Normalizer, Unifier) work in all contexts
@@ -372,28 +380,28 @@ Command: `codex`
 
 Specify in `overview.md`:
 
-**Claude (default):**
+**Claude (default)**:
 
 ```markdown
 default_provider: claude
 default_model: claude-sonnet-4-5
 ```
 
-**Gemini:**
+**Gemini**:
 
 ```markdown
 default_provider: gemini
 default_model: gemini-2.5-pro
 ```
 
-**Codex:**
+**Codex**:
 
 ```markdown
 default_provider: codex
 default_model: gpt-5.1
 ```
 
-**Using aliases:**
+**Using aliases**:
 
 ```markdown
 default_provider: claude
@@ -494,13 +502,13 @@ claude --version
 
 #### Structured Assignment Setup
 
-1. **Create assignment directory:**
+1. **Create assignment directory**:
 
    ```bash
    mkdir -p assignments/lab1/submissions
    ```
 
-2. **Add your base notebook:**
+2. **Add your base notebook**:
 
    ```bash
    cp your_base_notebook.ipynb assignments/lab1/base_notebook.ipynb
@@ -512,7 +520,7 @@ claude --version
    - Student input delimiters: `*Start student input* ↓` and `*End student input ↑*` in markdown cells
    - See `dev/examples/structured_assignment_example.ipynb` for reference
 
-3. **Create overview.md:**
+3. **Create overview.md**:
 
    ```bash
    cp assignments/overview_template.md assignments/lab1/overview.md
@@ -526,7 +534,7 @@ claude --version
    - Grading criteria
    - See template comments for guidance
 
-4. **Add student submissions:**
+4. **Add student submissions**:
 
    Copy student notebooks to `assignments/lab1/submissions/`. The system handles:
    - Nested subdirectories (any depth)

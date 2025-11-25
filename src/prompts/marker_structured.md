@@ -13,15 +13,17 @@ Evaluate the student's work **qualitatively** - identify mistakes and positive p
 ## Student Information
 
 **Student Name**: {student_name}
-**Submission**: {submission_path}
+**Submission Path** (for reference only): {submission_path}
 
 ## Student's Work for Activity {activity_id}
+
+**IMPORTANT**: The student's work is provided below. You have all the information you need - do NOT attempt to read any files.
 
 {student_work}
 
 ## Your Tasks
 
-Carefully review the student's work and provide a structured assessment.
+Carefully review the student's work above and provide a structured assessment.
 
 ### 1. Completeness Check
 - Did the student attempt all parts of the activity?

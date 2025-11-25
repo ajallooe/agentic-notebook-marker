@@ -152,31 +152,56 @@ if command -v parallel &> /dev/null && [[ $FORCE_XARGS == false ]]; then
     PARALLEL_CMD+=" --jobs $CONCURRENCY"
     PARALLEL_CMD+=" --line-buffer"
 
-    if [[ $VERBOSE == true ]]; then
-        # Use --bar for cleaner progress display instead of cryptic --progress
-        PARALLEL_CMD+=" --bar"
-        PARALLEL_CMD+=" --tag"
-    fi
+    # Redirect parallel output to log file and poll progress
+    PARALLEL_LOG=$(mktemp)
 
     if [[ -n "$OUTPUT_DIR" ]]; then
         PARALLEL_CMD+=" --results '$OUTPUT_DIR'"
     fi
 
-    # Execute with parallel
+    # Execute with parallel in background and monitor progress
     if [[ $VERBOSE == true ]]; then
-        echo "" >&2  # Newline before progress starts
-    fi
+        echo "" >&2
 
-    if [[ -n "$COMMAND" ]]; then
-        cat "$TASKS_FILE" | eval "$PARALLEL_CMD" "$COMMAND" 2>&1 | grep -v '^parallel:'
+        # Run parallel in background
+        if [[ -n "$COMMAND" ]]; then
+            cat "$TASKS_FILE" | eval "$PARALLEL_CMD" "$COMMAND" > "$PARALLEL_LOG" 2>&1 &
+        else
+            cat "$TASKS_FILE" | eval "$PARALLEL_CMD" > "$PARALLEL_LOG" 2>&1 &
+        fi
+
+        PARALLEL_PID=$!
+
+        # Monitor progress
+        while kill -0 $PARALLEL_PID 2>/dev/null; do
+            if [[ -n "$OUTPUT_DIR" ]]; then
+                # Count completed tasks by checking stdout files
+                COMPLETED=$(find "$OUTPUT_DIR" -name stdout -type f 2>/dev/null | wc -l | tr -d ' ')
+                PERCENT=$((COMPLETED * 100 / TOTAL_TASKS))
+                printf "\r\033[K[%3d%%] Completed %d/%d tasks" "$PERCENT" "$COMPLETED" "$TOTAL_TASKS" >&2
+            fi
+            sleep 0.5
+        done
+
+        # Wait for parallel to finish
+        wait $PARALLEL_PID
+        EXIT_CODE=$?
+
+        # Final progress update
+        COMPLETED=$TOTAL_TASKS
+        printf "\r\033[K[100%%] Completed %d/%d tasks\n\n" "$COMPLETED" "$TOTAL_TASKS" >&2
+
+        # Show log output
+        cat "$PARALLEL_LOG"
+        rm -f "$PARALLEL_LOG"
     else
-        cat "$TASKS_FILE" | eval "$PARALLEL_CMD" 2>&1 | grep -v '^parallel:'
-    fi
-
-    EXIT_CODE=${PIPESTATUS[0]}
-
-    if [[ $VERBOSE == true ]]; then
-        echo "" >&2  # Newline after progress completes
+        # Non-verbose mode - just run parallel
+        if [[ -n "$COMMAND" ]]; then
+            cat "$TASKS_FILE" | eval "$PARALLEL_CMD" "$COMMAND" 2>&1 | grep -v '^parallel:'
+        else
+            cat "$TASKS_FILE" | eval "$PARALLEL_CMD" 2>&1 | grep -v '^parallel:'
+        fi
+        EXIT_CODE=${PIPESTATUS[0]}
     fi
 
 elif command -v xargs &> /dev/null; then
