@@ -520,7 +520,7 @@ else
     log_info "To use automatic translation, place gradebook CSV files in:"
     log_info "  $GRADEBOOKS_DIR/"
     log_info "Or run translation manually later:"
-    log_info "  ./translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" --gradebooks <files>"
+    log_info "  ./utils/translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" --gradebooks <files>"
 fi
 
 # ============================================================================

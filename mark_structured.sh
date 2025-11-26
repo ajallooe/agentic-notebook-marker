@@ -42,6 +42,9 @@ log_error() {
 # Parse arguments
 FORCE_XARGS=false
 RESUME=true  # Always resume by default
+CLEAN_ARTIFACTS=true  # Clean artifacts by default
+STOP_AFTER_STAGE=""
+PARALLEL_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -58,6 +61,18 @@ while [[ $# -gt 0 ]]; do
             RESUME=false
             CLEAN_MODE=true
             shift
+            ;;
+        --no-clean-artifacts)
+            CLEAN_ARTIFACTS=false
+            shift
+            ;;
+        --stop-after)
+            STOP_AFTER_STAGE="$2"
+            shift 2
+            ;;
+        --parallel)
+            PARALLEL_OVERRIDE="$2"
+            shift 2
             ;;
         -*)
             echo "Unknown option: $1" >&2
@@ -78,9 +93,12 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "Example: $0 assignments/lab1"
     echo ""
     echo "Options:"
-    echo "  --force-xargs    Force use of xargs instead of GNU parallel (for testing)"
-    echo "  --no-resume      Start from scratch, don't resume from previous run"
-    echo "  --clean          Remove processed directory and start fresh"
+    echo "  --force-xargs           Force use of xargs instead of GNU parallel"
+    echo "  --no-resume             Start from scratch, don't resume"
+    echo "  --clean                 Remove processed directory and start fresh"
+    echo "  --no-clean-artifacts    Disable artifact cleaning of grades.csv"
+    echo "  --stop-after N          Stop after completing stage N"
+    echo "  --parallel N            Override max_parallel setting"
     exit 1
 fi
 
@@ -109,7 +127,15 @@ eval "$("$SRC_DIR/utils/config_parser.py" "$OVERVIEW_FILE" --bash)"
 log_info "Configuration:"
 log_info "  Provider: $DEFAULT_PROVIDER"
 log_info "  Default model: ${DEFAULT_MODEL:-default}"
-log_info "  Max parallel: $MAX_PARALLEL"
+
+# Override MAX_PARALLEL if --parallel flag provided
+if [[ -n "$PARALLEL_OVERRIDE" ]]; then
+    MAX_PARALLEL="$PARALLEL_OVERRIDE"
+    log_info "  Max parallel: $MAX_PARALLEL (overridden by --parallel)"
+else
+    log_info "  Max parallel: $MAX_PARALLEL"
+fi
+
 log_info "  Total marks: $TOTAL_MARKS"
 
 # Function to get model for a specific stage
@@ -611,7 +637,7 @@ else
     log_info "To use automatic translation, place gradebook CSV files in:"
     log_info "  $GRADEBOOKS_DIR/"
     log_info "Or run translation manually later:"
-    log_info "  ./translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" --gradebooks <files>"
+    log_info "  ./utils/translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" --gradebooks <files>"
 fi
 
 # ============================================================================
