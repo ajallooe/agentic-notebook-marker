@@ -25,7 +25,7 @@ def load_system_config():
     Returns:
         dict: Configuration dictionary with system defaults
     """
-    config_file = get_project_root() / "config.yaml"
+    config_file = get_project_root() / "configs" / "config.yaml"
 
     if not config_file.exists():
         # Fallback to hardcoded defaults if config.yaml is missing

@@ -550,6 +550,30 @@ else
     log_success "Aggregation complete"
 fi
 
+# Stop if requested
+if [[ "$STOP_AFTER_STAGE" == "8" ]]; then
+    log_info "Stopping after stage 8 as requested (--stop-after 8)"
+    exit 0
+fi
+
+# ============================================================================
+# STAGE 8.5: Artifact Cleaning (Automatic)
+# ============================================================================
+
+if [[ $CLEAN_ARTIFACTS == true ]]; then
+    log_info "Stage 8.5: Cleaning artifacts from grades.csv..."
+
+    python3 "$SRC_DIR/clean_artifacts.py" "$GRADES_CSV" --in-place --verbose
+
+    if [[ $? -eq 0 ]]; then
+        log_success "Artifacts cleaned"
+    else
+        log_warning "Artifact cleaning failed (continuing anyway)"
+    fi
+else
+    log_info "Stage 8.5: Skipping artifact cleaning (--no-clean-artifacts)"
+fi
+
 # ============================================================================
 # STAGE 9: Gradebook Translation (Optional, Automatic)
 # ============================================================================
