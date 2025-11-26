@@ -3,12 +3,16 @@
 Configuration parser for overview.md files.
 
 Supports YAML front matter and key-value pairs.
+Falls back to configs/config.yaml for system defaults.
 """
 
 import re
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+# Import system config loader
+from .system_config import load_system_config
 
 
 def parse_overview(overview_path: str) -> Dict[str, Any]:
@@ -19,16 +23,22 @@ def parse_overview(overview_path: str) -> Dict[str, Any]:
     1. YAML front matter (between --- delimiters)
     2. Key: value pairs anywhere in the file
 
+    Falls back to configs/config.yaml for unspecified values.
+
     Args:
         overview_path: Path to overview.md file
 
     Returns:
         Dictionary of configuration values with defaults
     """
+    # Load system defaults from configs/config.yaml
+    system_config = load_system_config()
+
+    # Start with system defaults, then override with assignment-specific values
     config = {
-        'default_provider': 'claude',
-        'default_model': '',
-        'max_parallel': 4,
+        'default_provider': system_config.get('default_provider', 'claude'),
+        'default_model': system_config.get('default_model', ''),
+        'max_parallel': system_config.get('max_parallel', 4),
         'base_file': '',
         'assignment_type': 'structured',
         'total_marks': 100,
