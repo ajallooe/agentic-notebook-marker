@@ -66,6 +66,11 @@ def main():
         default="structured",
         help="Assignment type"
     )
+    parser.add_argument(
+        "--different-problems",
+        action="store_true",
+        help="Groups solve different problems (abstract criteria needed)"
+    )
 
     args = parser.parse_args()
 
@@ -93,6 +98,28 @@ def main():
             existing_rubric = ""
             rubric_status = "No rubric provided - you must create one"
 
+        # Determine if this is a different-problems assignment
+        different_problems_note = ""
+        if args.different_problems:
+            different_problems_note = """
+## IMPORTANT: Different-Problems Assignment
+
+This is a **different-problems** assignment where each group solves a different problem.
+
+**Your criteria MUST be abstract and problem-independent:**
+- Focus on skills, techniques, and approaches (not specific problem details)
+- Create criteria that can apply to ANY problem in this domain
+- Examples of abstract criteria:
+  - "Correctly applied data preprocessing techniques"
+  - "Demonstrated understanding of model evaluation"
+  - "Implemented appropriate error handling"
+- Avoid problem-specific criteria like:
+  - "Correctly predicted housing prices" (too specific)
+  - "Used the Titanic dataset appropriately" (too specific)
+
+The marker agents will receive each group's specific problem description along with your abstract criteria.
+"""
+
         # Substitute variables in prompt
         prompt = prompt_template.format(
             base_notebook_path=args.base_notebook or "N/A (free-form assignment)",
@@ -101,7 +128,8 @@ def main():
             rubric_status=rubric_status,
             existing_rubric=existing_rubric,
             additional_materials="" if args.type == "structured" else "See overview file above",
-            processed_dir=args.processed_dir
+            processed_dir=args.processed_dir,
+            different_problems_note=different_problems_note
         )
 
         # Save prompt for debugging

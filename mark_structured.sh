@@ -225,6 +225,12 @@ fi
 NUM_STUDENTS=$(jq '.total_submissions' "$SUBMISSIONS_MANIFEST")
 log_success "Found $NUM_STUDENTS student submissions"
 
+# Stop if requested
+if [[ "$STOP_AFTER_STAGE" == "1" ]]; then
+    log_info "Stopping after stage 1 as requested (--stop-after 1)"
+    exit 0
+fi
+
 # ============================================================================
 # STAGE 2: Extract Activities from Base Notebook
 # ============================================================================
@@ -255,6 +261,12 @@ python3 "$SRC_DIR/extract_activities.py" \
 NUM_ACTIVITIES=7  # Placeholder
 
 log_success "Found $NUM_ACTIVITIES activities"
+
+# Stop if requested
+if [[ "$STOP_AFTER_STAGE" == "2" ]]; then
+    log_info "Stopping after stage 2 as requested (--stop-after 2)"
+    exit 0
+fi
 
 # ============================================================================
 # STAGE 3: Marking Pattern Designer (Interactive)
@@ -311,6 +323,12 @@ else
     fi
 
     log_success "Pattern design complete"
+fi
+
+# Stop after stage 3 if requested
+if [[ "$STOP_AFTER_STAGE" == "3" ]]; then
+    log_info "Stopping after stage 3 as requested (--stop-after 3)"
+    exit 0
 fi
 
 # Verify required files were created
@@ -387,6 +405,12 @@ else
     log_info "No marker tasks to run"
 fi
 
+# Stop after stage 4 if requested
+if [[ "$STOP_AFTER_STAGE" == "4" ]]; then
+    log_info "Stopping after stage 4 as requested (--stop-after 4)"
+    exit 0
+fi
+
 # ============================================================================
 # STAGE 5: Normalizer Agents (Per Activity)
 # ============================================================================
@@ -433,6 +457,12 @@ fi
 
 log_success "Stage 5 complete"
 
+# Stop after stage 5 if requested
+if [[ "$STOP_AFTER_STAGE" == "5" ]]; then
+    log_info "Stopping after stage 5 as requested (--stop-after 5)"
+    exit 0
+fi
+
 # ============================================================================
 # STAGE 6: Create Adjustment Dashboard
 # ============================================================================
@@ -465,6 +495,12 @@ else
     fi
 
     log_success "Approved scheme loaded"
+fi
+
+# Stop after stage 6 if requested
+if [[ "$STOP_AFTER_STAGE" == "6" ]]; then
+    log_info "Stopping after stage 6 as requested (--stop-after 6)"
+    exit 0
 fi
 
 # ============================================================================
@@ -522,6 +558,41 @@ else
     "$SRC_DIR/parallel_runner.sh" "${UNIFIER_ARGS[@]}"
 
     log_success "Unifier agents completed"
+fi
+
+# Stop after stage 7 if requested
+if [[ "$STOP_AFTER_STAGE" == "7" ]]; then
+    log_info "Stopping after stage 7 as requested (--stop-after 7)"
+    exit 0
+fi
+
+# ============================================================================
+# STAGE 7.5: Duplicate Group Feedback (Group Assignments Only)
+# ============================================================================
+
+GROUPS_CSV="$ASSIGNMENT_DIR/groups.csv"
+
+if [[ "$GROUP_ASSIGNMENT" == "true" ]]; then
+    if [[ -f "$GROUPS_CSV" ]]; then
+        log_info "Stage 7.5: Duplicating group feedback to individual students..."
+
+        python3 "$SRC_DIR/duplicate_group_feedback.py" \
+            --groups "$GROUPS_CSV" \
+            --feedback-dir "$FINAL_DIR" \
+            --verbose
+
+        if [[ $? -ne 0 ]]; then
+            log_error "Group feedback duplication failed"
+            exit 1
+        fi
+
+        log_success "Group feedback duplicated for individual students"
+    else
+        log_warning "Group assignment specified but groups.csv not found: $GROUPS_CSV"
+        log_warning "Continuing with group submissions only"
+    fi
+else
+    log_info "Stage 7.5: Skipping (not a group assignment)"
 fi
 
 # ============================================================================
@@ -662,6 +733,12 @@ else
     log_info "  $GRADEBOOKS_DIR/"
     log_info "Or run translation manually later:"
     log_info "  ./utils/translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" --gradebooks <files>"
+fi
+
+# Stop after stage 9 if requested
+if [[ "$STOP_AFTER_STAGE" == "9" ]]; then
+    log_info "Stopping after stage 9 as requested (--stop-after 9)"
+    exit 0
 fi
 
 # ============================================================================

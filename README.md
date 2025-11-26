@@ -28,13 +28,33 @@ cp ~/Downloads/*.csv assignments/your-assignment-name/gradebooks/
 ./mark_freeform.sh assignments/your-assignment-name
 ```
 
-### Debug Options
+### Command-Line Options
 
 ```bash
+# Override max parallel tasks
+./mark_structured.sh assignments/your-assignment-name --parallel 8
+
+# Stop after completing a specific stage (useful for debugging)
+./mark_structured.sh assignments/your-assignment-name --stop-after 3
+
+# Skip artifact cleaning (keep LLM generation artifacts in output files)
+./mark_structured.sh assignments/your-assignment-name --no-clean-artifacts
+
 # Force use of xargs instead of GNU parallel (for testing)
 ./mark_structured.sh assignments/your-assignment-name --force-xargs
-./mark_freeform.sh assignments/your-assignment-name --force-xargs
+
+# Combine multiple options
+./mark_structured.sh assignments/your-assignment-name --parallel 2 --stop-after 4 --no-clean-artifacts
 ```
+
+**Available flags**:
+
+- `--parallel N`: Override max parallel tasks (overrides overview.md and config.yaml)
+- `--stop-after N`: Stop after completing stage N (1-9 for structured, 1-8 for freeform)
+- `--no-clean-artifacts`: Skip cleaning LLM artifacts from grades.csv
+- `--no-resume`: Start from scratch, ignoring previous progress
+- `--clean`: Remove processed directory and start completely fresh
+- `--force-xargs`: Force use of xargs instead of GNU parallel (for testing)
 
 ### Resume Options
 
@@ -78,15 +98,53 @@ The marking scripts automatically resume from where they left off by default. If
 
 ## What This System Does
 
-This system semi-automates the marking of Jupyter notebook assignments through a multi-agent workflow:
+This system semi-automates the marking of Jupyter notebook assignments through a carefully designed multi-agent workflow:
 
-1. **Marking Pattern Designer** - Analyzes assignment and creates detailed marking criteria
-2. **Marker Agents** - Evaluate each student's work qualitatively (in parallel)
-3. **Normalizer Agent** - Aggregates assessments and creates unified scoring scheme
-4. **Instructor Review** - Interactive dashboard for adjusting marks and viewing distribution
-5. **Unifier Agents** - Apply final scheme and create student feedback cards (in parallel)
-6. **Aggregator** - Consolidates everything into a CSV for grade upload
-7. **Translator** (optional) - Transfers grades back to LMS gradebooks with intelligent name matching
+### Workflow Stages
+
+1. **Submission Discovery** - Finds and validates all student notebooks
+2. **Activity Extraction** - Extracts student work from structured assignments (structured only)
+3. **Marking Pattern Designer** - Analyzes assignment and creates detailed marking criteria
+4. **Marker Agents** - Evaluate each student's work qualitatively (in parallel)
+5. **Normalizer Agent** - Aggregates assessments and creates unified scoring scheme
+6. **Instructor Review** - Interactive dashboard for adjusting marks and viewing distribution
+7. **Unifier Agents** - Apply final scheme and create student feedback cards (in parallel)
+8. **Group Feedback Duplication** - Distributes group marks to individual members (group assignments only)
+9. **Aggregator** - Consolidates everything into a CSV for grade upload
+10. **Artifact Cleaning** - Removes LLM generation artifacts from output (optional, automatic)
+11. **Gradebook Translation** - Transfers grades back to LMS gradebooks with intelligent name matching (optional, automatic)
+
+### Why This Multi-Stage Approach?
+
+The system deliberately separates **qualitative evaluation** from **quantitative scoring** for several key reasons:
+
+**1. Consistency Through Calibration**
+
+- Early marker agents evaluate work qualitatively (identifying mistakes, positive points)
+- The normalizer agent then sees ALL student work patterns before assigning point values
+- This ensures similar mistakes receive consistent deductions across all students
+- Prevents the "first student penalty" where early evaluations may be harsher or more lenient
+
+**2. Instructor Control**
+
+- The interactive dashboard shows the full distribution of marks before finalization
+- Instructors can adjust the severity of deductions to achieve desired grade distribution
+- Changes are immediately reflected in a histogram showing impact on class marks
+- Final approval required before individual feedback is generated
+
+**3. Scalability Without Quality Loss**
+
+- Parallelizes the most time-intensive steps (marker and unifier agents)
+- Each student gets detailed, individualized feedback
+- Human instructor focuses only on high-level scoring decisions, not repetitive evaluation
+- Can process 200+ students with the same attention to detail as 20 students
+
+**4. Reduced Bias**
+
+- LLMs evaluate code/work objectively without names attached
+- Aggregation happens after qualitative assessment, not during
+- Academic integrity concerns flagged for instructor review rather than automatic penalties
+- Consistent criteria applied across all submissions
 
 ## Prerequisites
 
@@ -128,12 +186,12 @@ jupyter nbextension enable --py widgetsnbextension
 
 ## System Configuration
 
-### Global Defaults (`config.yaml`)
+### Global Defaults (`configs/config.yaml`)
 
 The system-wide configuration file defines fallback defaults for all assignments:
 
 ```yaml
-# config.yaml (at project root)
+# configs/config.yaml
 default_provider: claude    # Options: claude, gemini, codex
 default_model:              # Optional: specific model (e.g., gpt-5.1, claude-sonnet-4)
 max_parallel: 4             # Number of parallel tasks
@@ -142,23 +200,32 @@ verbose: true               # Enable detailed logging
 
 **Configuration hierarchy**:
 
-1. **Assignment-specific** (`assignments/*/overview.md`) - highest priority
-2. **System-wide** (`config.yaml`) - fallback defaults
-3. **Hardcoded fallbacks** - if config.yaml is missing
+1. **Command-line flags** (`--parallel N`) - highest priority
+2. **Assignment-specific** (`assignments/*/overview.md`)
+3. **System-wide** (`configs/config.yaml`) - fallback defaults
+4. **Hardcoded fallbacks** - if config.yaml is missing
 
 **Example**:
 
 ```yaml
-# config.yaml - your preferred defaults
+# configs/config.yaml - your preferred defaults
 default_provider: codex
 default_model: gpt-5.1
+max_parallel: 4
 
 # assignments/lab1/overview.md - override for this assignment only
 default_provider: gemini
 default_model: gemini-2.0-flash-exp
+max_parallel: 2
 ```
 
-This assignment will use Gemini, while others use Codex by default.
+```bash
+# Further override with command-line flag
+./mark_structured.sh assignments/lab1 --parallel 8
+# Will use: Gemini 2.0, 8 parallel tasks
+```
+
+This assignment will use Gemini with 8 parallel tasks, while others use Codex by default.
 
 ## Assignment Structure
 
@@ -169,9 +236,11 @@ assignments/
 └── assignment-name/
     ├── overview.md                    # Assignment config and description
     ├── base_notebook.ipynb            # Base notebook (structured only)
+    ├── groups.csv                     # Optional: Group membership (group assignments)
     ├── submissions/
     │   ├── section-1/
-    │   │   ├── student1.ipynb
+    │   │   ├── student1.ipynb         # Individual submission
+    │   │   ├── Team Alpha.ipynb       # Or group submission
     │   │   └── nested/
     │   │       └── student2.ipynb
     │   └── section-2/
@@ -194,6 +263,7 @@ max_parallel: 4
 base_file: lab1_base.ipynb
 assignment_type: structured
 total_marks: 100
+group_assignment: false  # Set to true for group assignments
 
 # Per-stage model overrides (optional)
 stage_models:
@@ -226,6 +296,130 @@ The system supports specifying different models for each stage of the marking wo
 - `normalizer` - Agent that aggregates and normalizes markings (Stage 3)
 - `unifier` - Parallel agents that create final student feedback (Stage 4, runs many times)
 - `aggregator` - Interactive agent that generates final CSV (Stage 5)
+
+### Group Assignments
+
+For assignments where students work in teams, the system supports group-based marking to avoid evaluating duplicate submissions:
+
+**Setup**:
+
+1. **Mark as group assignment** in `overview.md`:
+
+```yaml
+---
+group_assignment: true
+assignment_type: structured  # or freeform
+total_marks: 100
+---
+```
+
+2. **Create `groups.csv`** in assignment directory:
+
+```csv
+group_name,student_name
+Team Alpha,John Smith
+Team Alpha,Jane Doe
+Team Beta,Bob Johnson
+Team Beta,Alice Williams
+```
+
+3. **Submit group work** with group names:
+   - Submissions should be named after groups: `Team Alpha.ipynb`, `Team Beta.ipynb`
+   - Place in the usual `submissions/` directory structure
+
+**How it works**:
+
+1. Stages 1-7: System marks group submissions only (not individual students)
+2. Stage 7.5 (automatic): Group feedback is duplicated to each team member
+   - `Team Alpha_feedback.md` → `John Smith_feedback.md`, `Jane Doe_feedback.md`
+3. Stage 8: Aggregator creates individual student rows in grades.csv
+
+**Notes**:
+
+- Each student receives their own row in the final CSV with the group's mark
+- Individual feedback files are created via symlinks (efficient) or copies
+- Students in multiple groups will trigger a warning during processing
+- Group membership is only needed for final grade distribution, not during marking
+
+### Different-Problem Group Assignments
+
+For group assignments where **each group solves a different problem** (e.g., different datasets, different case studies), the system supports **abstract marking criteria** with problem-specific context:
+
+**Requirements**:
+
+- Must be a `group_assignment: true`
+- Must be `assignment_type: freeform`
+- Set `different_problems: true` in `overview.md`
+
+**Setup**:
+
+1. **Configure in `overview.md`**:
+
+```yaml
+---
+group_assignment: true
+assignment_type: freeform
+different_problems: true
+total_marks: 100
+---
+
+# Assignment Description
+
+Your abstract assignment description goes here. Describe the **skills and techniques**
+students should demonstrate, not specific problem details.
+
+Example:
+- Apply appropriate machine learning techniques to solve a classification problem
+- Demonstrate proper data preprocessing and feature engineering
+- Evaluate model performance using appropriate metrics
+```
+
+1. **Structure submissions** with problem descriptions:
+
+```text
+assignments/assignment-name/submissions/section-name/
+├── Team Alpha/
+│   ├── Team Alpha.ipynb         # Group's solution
+│   └── problem.md               # Their specific problem description
+├── Team Beta/
+│   ├── Team Beta.ipynb
+│   └── problem.md               # Different problem
+```
+
+Each group's `problem.md` should contain their specific problem, dataset description, and any supplementary materials.
+
+1. **Create `groups.csv`** (same as regular group assignments):
+
+```csv
+group_name,student_name
+Team Alpha,John Smith
+Team Alpha,Jane Doe
+Team Beta,Bob Johnson
+```
+
+**How it works**:
+
+1. **Stage 1.5**: System extracts each group's `problem.md` and supplementary files into `problem_contexts.json`
+2. **Stage 2**: Pattern designer creates **abstract criteria** (e.g., "Correctly applied preprocessing" instead of "Correctly handled Titanic dataset")
+3. **Stage 3**: Each marker agent receives:
+   - Abstract marking criteria (same for all groups)
+   - Group's specific problem description
+   - Group's solution notebook
+4. **Stages 4-8**: Normal workflow with problem-aware feedback
+
+**Best practices for abstract criteria**:
+
+✅ **Good (abstract)**:
+
+- "Correctly identified and handled missing values"
+- "Applied appropriate feature scaling techniques"
+- "Selected suitable evaluation metrics for the problem type"
+
+❌ **Bad (problem-specific)**:
+
+- "Correctly predicted housing prices"
+- "Used the Titanic survival column as target"
+- "Achieved >80% accuracy on iris classification"
 
 **Example Configurations**:
 
@@ -539,6 +733,58 @@ gemini "test"
 
 # Test Codex
 codex exec "test"
+```
+
+## Utilities
+
+The system includes several standalone utilities in the `utils/` directory:
+
+### Gradebook Translation (`utils/translate_grades.sh`)
+
+Transfers grades from `processed/final/grades.csv` to LMS gradebook CSVs with intelligent name matching:
+
+```bash
+# Automatic translation (if gradebooks/ directory exists)
+# Run happens automatically after marking completes
+
+# Manual translation
+./utils/translate_grades.sh \
+  --assignment-dir assignments/lab1 \
+  --gradebooks assignments/lab1/gradebooks/*.csv
+```
+
+**Features**:
+- LLM-powered fuzzy name matching (handles different name formats)
+- Two-stage workflow: LLM mapping + deterministic application
+- Creates backups before modifying gradebooks
+- Generates translation report with match details
+
+### Artifact Cleaner (`utils/clean_artifacts.sh`)
+
+Removes LLM generation artifacts from text files:
+
+```bash
+# Clean a specific file in-place
+./utils/clean_artifacts.sh path/to/grades.csv --in-place
+
+# Preview changes without modifying
+./utils/clean_artifacts.sh path/to/file.txt --dry-run
+
+# Clean and save to new file
+./utils/clean_artifacts.sh input.txt --output cleaned.txt
+```
+
+**What it removes**:
+- "YOLO mode is enabled. All tool calls will be automatically approved."
+- "Loaded cached credentials."
+- Other LLM tool artifacts listed in `configs/processing_artifacts.jsonl`
+
+### Overview Generator (`utils/create_overview.sh`)
+
+Creates `overview.md` template for new assignments:
+
+```bash
+./utils/create_overview.sh assignments/new-assignment
 ```
 
 ## Troubleshooting

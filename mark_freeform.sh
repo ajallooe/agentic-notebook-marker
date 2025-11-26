@@ -42,6 +42,9 @@ log_error() {
 # Parse arguments
 FORCE_XARGS=false
 RESUME=true  # Always resume by default
+CLEAN_ARTIFACTS=true  # Clean artifacts by default
+STOP_AFTER_STAGE=""
+PARALLEL_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -58,6 +61,18 @@ while [[ $# -gt 0 ]]; do
             RESUME=false
             CLEAN_MODE=true
             shift
+            ;;
+        --no-clean-artifacts)
+            CLEAN_ARTIFACTS=false
+            shift
+            ;;
+        --stop-after)
+            STOP_AFTER_STAGE="$2"
+            shift 2
+            ;;
+        --parallel)
+            PARALLEL_OVERRIDE="$2"
+            shift 2
             ;;
         -*)
             echo "Unknown option: $1" >&2
@@ -78,9 +93,12 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "Example: $0 assignments/project1"
     echo ""
     echo "Options:"
-    echo "  --force-xargs    Force use of xargs instead of GNU parallel (for testing)"
-    echo "  --no-resume      Start from scratch, don't resume from previous run"
-    echo "  --clean          Remove processed directory and start fresh"
+    echo "  --force-xargs         Force use of xargs instead of GNU parallel (for testing)"
+    echo "  --no-resume           Start from scratch, don't resume from previous run"
+    echo "  --clean               Remove processed directory and start fresh"
+    echo "  --no-clean-artifacts  Skip cleaning LLM artifacts from output files"
+    echo "  --stop-after N        Stop after completing stage N (1-8)"
+    echo "  --parallel N          Override max parallel tasks (default from config)"
     exit 1
 fi
 
@@ -109,7 +127,15 @@ eval "$("$SRC_DIR/utils/config_parser.py" "$OVERVIEW_FILE" --bash)"
 log_info "Configuration:"
 log_info "  Provider: $DEFAULT_PROVIDER"
 log_info "  Default model: ${DEFAULT_MODEL:-default}"
-log_info "  Max parallel: $MAX_PARALLEL"
+
+# Apply --parallel override if provided
+if [[ -n "$PARALLEL_OVERRIDE" ]]; then
+    MAX_PARALLEL="$PARALLEL_OVERRIDE"
+    log_info "  Max parallel: $MAX_PARALLEL (overridden by --parallel)"
+else
+    log_info "  Max parallel: $MAX_PARALLEL"
+fi
+
 log_info "  Total marks: $TOTAL_MARKS"
 
 # Function to get model for a specific stage
@@ -197,6 +223,40 @@ fi
 NUM_STUDENTS=$(jq '.total_submissions' "$SUBMISSIONS_MANIFEST")
 log_success "Found $NUM_STUDENTS student submissions"
 
+# Stop after stage 1 if requested
+if [[ "$STOP_AFTER_STAGE" == "1" ]]; then
+    log_info "Stopping after stage 1 as requested (--stop-after 1)"
+    exit 0
+fi
+
+# ============================================================================
+# STAGE 1.5: Extract Problem Contexts (Different-Problem Assignments Only)
+# ============================================================================
+
+PROBLEM_CONTEXTS="$PROCESSED_DIR/problem_contexts.json"
+
+if [[ "$DIFFERENT_PROBLEMS" == "true" ]]; then
+    if [[ $RESUME == true && -f "$PROBLEM_CONTEXTS" ]]; then
+        log_info "Stage 1.5: Skipping (problem contexts already extracted)"
+    else
+        log_info "Stage 1.5: Extracting problem contexts from group directories..."
+
+        python3 "$SRC_DIR/extract_problem_context.py" \
+            --manifest "$SUBMISSIONS_MANIFEST" \
+            --output "$PROBLEM_CONTEXTS" \
+            --verbose
+
+        if [[ $? -ne 0 ]]; then
+            log_error "Problem context extraction failed"
+            exit 1
+        fi
+
+        log_success "Problem contexts extracted"
+    fi
+else
+    log_info "Stage 1.5: Skipping (not a different-problems assignment)"
+fi
+
 # ============================================================================
 # STAGE 2: Marking Pattern Designer (Interactive)
 # ============================================================================
@@ -216,7 +276,8 @@ else
         --session-log "$PATTERN_DESIGNER_SESSION" \
         --provider "$DEFAULT_PROVIDER" \
         ${MODEL_PATTERN_DESIGNER:+--model "$MODEL_PATTERN_DESIGNER"} \
-        --type freeform
+        --type freeform \
+        $([[ "$DIFFERENT_PROBLEMS" == "true" ]] && echo "--different-problems")
 
     if [[ $? -ne 0 ]]; then
         log_error "Pattern designer failed"
@@ -235,6 +296,12 @@ else
         log_error "Marking criteria file not created. Please ensure pattern designer completed successfully."
         exit 1
     fi
+fi
+
+# Stop after stage 2 if requested
+if [[ "$STOP_AFTER_STAGE" == "2" ]]; then
+    log_info "Stopping after stage 2 as requested (--stop-after 2)"
+    exit 0
 fi
 
 # ============================================================================
@@ -258,7 +325,14 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        echo "python3 '$SRC_DIR/agents/marker.py' --student '$student_name' --submission '$submission_path' --criteria '$PROCESSED_DIR/marking_criteria.md' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'}" >> "$MARKER_TASKS"
+        task_cmd="python3 '$SRC_DIR/agents/marker.py' --student '$student_name' --submission '$submission_path' --criteria '$PROCESSED_DIR/marking_criteria.md' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'}"
+
+        # For different-problems assignments, pass problem context
+        if [[ "$DIFFERENT_PROBLEMS" == "true" && -f "$PROBLEM_CONTEXTS" ]]; then
+            task_cmd="$task_cmd --problem-context '$PROBLEM_CONTEXTS'"
+        fi
+
+        echo "$task_cmd" >> "$MARKER_TASKS"
     fi
 done
 
@@ -292,6 +366,12 @@ else
     log_success "Marker agents completed"
 fi
 
+# Stop after stage 3 if requested
+if [[ "$STOP_AFTER_STAGE" == "3" ]]; then
+    log_info "Stopping after stage 3 as requested (--stop-after 3)"
+    exit 0
+fi
+
 # ============================================================================
 # STAGE 4: Normalizer Agent
 # ============================================================================
@@ -318,6 +398,12 @@ else
     fi
 
     log_success "Normalization complete"
+fi
+
+# Stop after stage 4 if requested
+if [[ "$STOP_AFTER_STAGE" == "4" ]]; then
+    log_info "Stopping after stage 4 as requested (--stop-after 4)"
+    exit 0
 fi
 
 # ============================================================================
@@ -352,6 +438,12 @@ else
     fi
 
     log_success "Approved scheme loaded"
+fi
+
+# Stop after stage 5 if requested
+if [[ "$STOP_AFTER_STAGE" == "5" ]]; then
+    log_info "Stopping after stage 5 as requested (--stop-after 5)"
+    exit 0
 fi
 
 # ============================================================================
@@ -407,6 +499,41 @@ else
     log_success "Unifier agents completed"
 fi
 
+# Stop after stage 6 if requested
+if [[ "$STOP_AFTER_STAGE" == "6" ]]; then
+    log_info "Stopping after stage 6 as requested (--stop-after 6)"
+    exit 0
+fi
+
+# ============================================================================
+# STAGE 6.5: Duplicate Group Feedback (Group Assignments Only)
+# ============================================================================
+
+GROUPS_CSV="$ASSIGNMENT_DIR/groups.csv"
+
+if [[ "$GROUP_ASSIGNMENT" == "true" ]]; then
+    if [[ -f "$GROUPS_CSV" ]]; then
+        log_info "Stage 6.5: Duplicating group feedback to individual students..."
+
+        python3 "$SRC_DIR/duplicate_group_feedback.py" \
+            --groups "$GROUPS_CSV" \
+            --feedback-dir "$FINAL_DIR" \
+            --verbose
+
+        if [[ $? -ne 0 ]]; then
+            log_error "Group feedback duplication failed"
+            exit 1
+        fi
+
+        log_success "Group feedback duplicated for individual students"
+    else
+        log_warning "Group assignment specified but groups.csv not found: $GROUPS_CSV"
+        log_warning "Continuing with group submissions only"
+    fi
+else
+    log_info "Stage 6.5: Skipping (not a group assignment)"
+fi
+
 # ============================================================================
 # STAGE 7: Aggregator Agent (Interactive)
 # ============================================================================
@@ -434,7 +561,30 @@ else
 fi
 
 # ============================================================================
-# STAGE 7: Gradebook Translation (Optional, Automatic)
+# STAGE 7.5: Clean Artifacts from grades.csv
+# ============================================================================
+
+if [[ $CLEAN_ARTIFACTS == true ]]; then
+    log_info "Stage 7.5: Cleaning artifacts from grades.csv..."
+    python3 "$SRC_DIR/clean_artifacts.py" "$GRADES_CSV" --in-place --verbose
+
+    if [[ $? -ne 0 ]]; then
+        log_warning "Artifact cleaning failed (non-critical)"
+    else
+        log_success "Artifacts cleaned from grades.csv"
+    fi
+else
+    log_info "Stage 7.5: Skipping artifact cleaning (--no-clean-artifacts)"
+fi
+
+# Stop after stage 7 if requested
+if [[ "$STOP_AFTER_STAGE" == "7" ]]; then
+    log_info "Stopping after stage 7 as requested (--stop-after 7)"
+    exit 0
+fi
+
+# ============================================================================
+# STAGE 8: Gradebook Translation (Optional, Automatic)
 # ============================================================================
 
 GRADEBOOKS_DIR="$ASSIGNMENT_DIR/gradebooks"
@@ -443,7 +593,7 @@ TRANSLATION_MAPPING="$TRANSLATION_DIR/translation_mapping.json"
 
 # Check if gradebook CSVs are provided
 if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null; then
-    log_info "Stage 7: Gradebook translation (automatic)..."
+    log_info "Stage 8: Gradebook translation (automatic)..."
 
     # Count gradebook files
     GRADEBOOK_FILES=("$GRADEBOOKS_DIR"/*.csv)
@@ -516,11 +666,17 @@ if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null;
         fi
     fi
 else
-    log_info "Stage 7: Skipping gradebook translation (no gradebooks provided)"
+    log_info "Stage 8: Skipping gradebook translation (no gradebooks provided)"
     log_info "To use automatic translation, place gradebook CSV files in:"
     log_info "  $GRADEBOOKS_DIR/"
     log_info "Or run translation manually later:"
     log_info "  ./utils/translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" --gradebooks <files>"
+fi
+
+# Stop after stage 8 if requested
+if [[ "$STOP_AFTER_STAGE" == "8" ]]; then
+    log_info "Stopping after stage 8 as requested (--stop-after 8)"
+    exit 0
 fi
 
 # ============================================================================

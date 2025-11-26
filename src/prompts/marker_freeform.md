@@ -10,6 +10,8 @@ Evaluate the student's work **qualitatively** - identify mistakes and positive p
 
 {marking_criteria}
 
+{problem_context}
+
 ## Student Information
 
 **Student Name**: {student_name}
@@ -19,7 +21,7 @@ Evaluate the student's work **qualitatively** - identify mistakes and positive p
 
 **IMPORTANT**: The student's complete notebook is provided below. You have all the information you need - do NOT attempt to read any files.
 
-{student_notebook}
+{student_work}
 
 ## Your Tasks
 

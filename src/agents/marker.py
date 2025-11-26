@@ -91,6 +91,55 @@ def load_marking_criteria(criteria_path: str) -> str:
     return "No specific criteria provided."
 
 
+def load_problem_context(problem_contexts_path: str, student_name: str) -> str:
+    """
+    Load problem-specific context for different-problem assignments.
+
+    Args:
+        problem_contexts_path: Path to problem_contexts.json
+        student_name: Student/group name
+
+    Returns:
+        Formatted problem context string or empty if not found
+    """
+    if not Path(problem_contexts_path).exists():
+        return ""
+
+    try:
+        with open(problem_contexts_path, 'r') as f:
+            contexts = json.load(f)
+
+        if student_name in contexts:
+            ctx = contexts[student_name]
+            problem_desc = ctx.get('problem_description', '')
+            supplementary = ctx.get('supplementary_files', [])
+
+            context_parts = [
+                "## Problem-Specific Context",
+                "",
+                "This group was assigned the following problem:",
+                "",
+                problem_desc
+            ]
+
+            if supplementary:
+                context_parts.extend([
+                    "",
+                    "### Supplementary Files",
+                    "The following supplementary files were provided with the problem:",
+                    ""
+                ])
+                for supp_file in supplementary:
+                    context_parts.append(f"- {supp_file}")
+
+            return "\n".join(context_parts)
+        else:
+            return ""
+    except Exception as e:
+        print(f"Warning: Failed to load problem context: {e}", file=sys.stderr)
+        return ""
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Marker agent for evaluating student submissions"
@@ -134,6 +183,10 @@ def main():
         default="structured",
         help="Assignment type"
     )
+    parser.add_argument(
+        "--problem-context",
+        help="Path to problem_contexts.json for different-problem assignments"
+    )
 
     args = parser.parse_args()
 
@@ -159,13 +212,19 @@ def main():
             else:
                 criteria = "No marking criteria provided."
 
+        # Load problem context for different-problem assignments
+        problem_context = ""
+        if args.problem_context:
+            problem_context = load_problem_context(args.problem_context, args.student)
+
         # Substitute variables in prompt
         prompt = prompt_template.format(
             activity_id=args.activity or "N/A",
             student_name=args.student,
             submission_path=args.submission,
             student_work=student_work,
-            marking_criteria=criteria
+            marking_criteria=criteria,
+            problem_context=problem_context
         )
 
         # Save prompt for debugging

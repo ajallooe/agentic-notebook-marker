@@ -11,8 +11,17 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+# Add project root to path to support both script and module execution
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 # Import system config loader
-from .system_config import load_system_config
+try:
+    from .system_config import load_system_config
+except ImportError:
+    # When run as script, use absolute import
+    from src.utils.system_config import load_system_config
 
 
 def parse_overview(overview_path: str) -> Dict[str, Any]:
@@ -42,6 +51,8 @@ def parse_overview(overview_path: str) -> Dict[str, Any]:
         'base_file': '',
         'assignment_type': 'structured',
         'total_marks': 100,
+        'group_assignment': False,  # Whether this is a group assignment
+        'different_problems': False,  # Whether groups solve different problems (requires group_assignment=true, assignment_type=freeform)
         'description': '',
         'stage_models': {}  # Per-stage model overrides
     }
@@ -138,6 +149,13 @@ def parse_overview(overview_path: str) -> Dict[str, Any]:
                 else:
                     config[key] = value
 
+    # Validate configuration constraints
+    if config['different_problems']:
+        if not config['group_assignment']:
+            print("Warning: different_problems=true requires group_assignment=true", file=sys.stderr)
+        if config['assignment_type'] != 'freeform':
+            print("Warning: different_problems=true requires assignment_type=freeform", file=sys.stderr)
+
     return config
 
 
@@ -170,12 +188,20 @@ def export_bash_vars(config: Dict[str, Any]) -> str:
         'max_parallel': 'MAX_PARALLEL',
         'base_file': 'BASE_FILE',
         'assignment_type': 'ASSIGNMENT_TYPE',
-        'total_marks': 'TOTAL_MARKS'
+        'total_marks': 'TOTAL_MARKS',
+        'group_assignment': 'GROUP_ASSIGNMENT',
+        'different_problems': 'DIFFERENT_PROBLEMS'
     }
 
     for key, bash_var in mapping.items():
         value = config.get(key, '')
-        if isinstance(value, str):
+        if value is None:
+            # Convert None to empty string for bash
+            bash_lines.append(f'{bash_var}=""')
+        elif isinstance(value, bool):
+            # Convert Python bool to bash true/false
+            bash_lines.append(f'{bash_var}={str(value).lower()}')
+        elif isinstance(value, str):
             bash_lines.append(f'{bash_var}="{value}"')
         else:
             bash_lines.append(f'{bash_var}={value}')
