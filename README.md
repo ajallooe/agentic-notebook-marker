@@ -849,35 +849,35 @@ assignments/project-phase1
 **Recommended Workflow:**
 
 ```bash
-# Round 1: Pattern Design - Review marking criteria
+# Round 1: Submission Discovery - Verify submissions found
+./utils/batch_mark.sh my_assignments.txt --stop-after 1
+# → Verify ALL student/group submissions were found correctly
+# → Check submissions_manifest.json for each assignment
+
+# Round 2: Pattern Design - Review marking criteria
 ./utils/batch_mark.sh my_assignments.txt --stop-after 2
 # → Instructor reviews ALL rubrics and marking criteria
 # → Verify criteria are appropriate before any marking begins
 
-# Round 2: Marker Assessment - Review qualitative evaluations
-./utils/batch_mark.sh my_assignments.txt --stop-after 3
-# → Instructor reviews ALL marker assessments
-# → Spot-check for quality and consistency
+# Round 3: Normalization - Review scoring schemes
+./utils/batch_mark.sh my_assignments.txt --stop-after 4
+# → Review normalized scoring schemes from marker aggregation
+# → Verify mistake/positive point categorization looks reasonable
 
-# Round 3: Instructor Dashboard - Approve marking schemes
+# Round 4: Dashboard Review - Approve final marking
 ./utils/batch_mark.sh my_assignments.txt --stop-after 5
 # → Instructor reviews ALL adjustment dashboards
 # → Approve final marking schemes with distribution preview
 
-# Round 4: Final Feedback - Review student feedback cards
-./utils/batch_mark.sh my_assignments.txt --stop-after 6
-# → Instructor reviews ALL final feedback cards
-# → Last chance to verify before distribution
-
 # Round 5: Completion - Generate final grades
 ./utils/batch_mark.sh my_assignments.txt
-# → Aggregation, artifact cleaning, and optional gradebook translation
+# → Unification, aggregation, artifact cleaning, gradebook translation
 # → grades.csv ready for upload to LMS
 ```
 
 **Benefits:**
 
-- **Quality checkpoints**: Review criteria (Stage 2), assessments (Stage 3), schemes (Stage 5), and feedback (Stage 6)
+- **Quality checkpoints**: Verify submissions (Stage 1), criteria (Stage 2), scoring (Stage 4), schemes (Stage 5)
 - **Minimizes context switching**: Review similar tasks across all assignments at once
 - **Reduces idle time**: No waiting between stages for individual assignments
 - **Consistency**: Spot patterns and ensure uniform standards across assignments

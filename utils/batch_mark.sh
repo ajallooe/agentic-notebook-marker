@@ -75,21 +75,21 @@ Options:
   --help              Show this help message
 
 Recommended Workflow:
-  Round 1: Pattern Design
+  Round 1: Submission Discovery
+    $ $(basename "$0") assignments.txt --stop-after 1
+    → Verify all submissions were found correctly
+
+  Round 2: Pattern Design
     $ $(basename "$0") assignments.txt --stop-after 2
     → Review all rubrics and marking criteria
 
-  Round 2: Marker Assessment
-    $ $(basename "$0") assignments.txt --stop-after 3
-    → Review all marker qualitative evaluations
+  Round 3: Normalization
+    $ $(basename "$0") assignments.txt --stop-after 4
+    → Review normalized scoring schemes
 
-  Round 3: Instructor Dashboard
+  Round 4: Dashboard Review
     $ $(basename "$0") assignments.txt --stop-after 5
-    → Review and approve all marking schemes
-
-  Round 4: Final Feedback
-    $ $(basename "$0") assignments.txt --stop-after 6
-    → Review all student feedback cards
+    → Review and approve all marking schemes in dashboards
 
   Round 5: Completion
     $ $(basename "$0") assignments.txt
@@ -183,10 +183,10 @@ echo
 if [[ -n "$STOP_AFTER" ]]; then
     STAGE_DESC=""
     case "$STOP_AFTER" in
-        1) STAGE_DESC="Submission discovery" ;;
+        1) STAGE_DESC="Submission discovery (VERIFY)" ;;
         2) STAGE_DESC="Pattern design (INTERACTIVE)" ;;
         3) STAGE_DESC="Marker agents" ;;
-        4) STAGE_DESC="Normalization" ;;
+        4) STAGE_DESC="Normalization (REVIEW)" ;;
         5) STAGE_DESC="Dashboard review (INTERACTIVE)" ;;
         6) STAGE_DESC="Unification" ;;
         7|8|9) STAGE_DESC="Near completion" ;;
@@ -317,6 +317,29 @@ if [[ -n "$STOP_AFTER" ]]; then
     echo "=================================================================="
     echo
     case "$STOP_AFTER" in
+        1)
+            log_info "✓ Stage 1 (Submission Discovery) complete for all assignments"
+            echo
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            log_warning "VERIFY: Submissions found correctly"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo
+            echo "Check submission manifests for each assignment:"
+            for assignment in "${ASSIGNMENTS[@]}"; do
+                if [[ "$assignment" = /* ]]; then
+                    ASSIGNMENT_DIR="$assignment"
+                else
+                    ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
+                fi
+                echo
+                echo "📁 $assignment"
+                echo "  • Manifest: $ASSIGNMENT_DIR/processed/submissions_manifest.json"
+                echo "    Verify all expected students/groups were found"
+            done
+            echo
+            log_info "When submissions look correct, continue with Round 2:"
+            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 2"
+            ;;
         2)
             log_info "✓ Stage 2 (Pattern Design) complete for all assignments"
             echo
@@ -341,17 +364,17 @@ if [[ -n "$STOP_AFTER" ]]; then
                 fi
             done
             echo
-            log_info "When criteria look good, continue with Round 2:"
-            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 3"
+            log_info "When criteria look good, continue with Round 3:"
+            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 4"
             ;;
-        3)
-            log_info "✓ Stage 3 (Marker Agents) complete for all assignments"
+        4)
+            log_info "✓ Stage 4 (Normalization) complete for all assignments"
             echo
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "REVIEW REQUIRED: Qualitative marker assessments"
+            log_warning "REVIEW REQUIRED: Normalized scoring schemes"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo
-            echo "Spot-check marker assessments for quality:"
+            echo "Review normalized scoring for each assignment:"
             for assignment in "${ASSIGNMENTS[@]}"; do
                 if [[ "$assignment" = /* ]]; then
                     ASSIGNMENT_DIR="$assignment"
@@ -360,11 +383,13 @@ if [[ -n "$STOP_AFTER" ]]; then
                 fi
                 echo
                 echo "📁 $assignment"
-                echo "  • Markings: $ASSIGNMENT_DIR/processed/markings/"
-                echo "    Sample a few files to verify quality and consistency"
+                if [[ -d "$ASSIGNMENT_DIR/processed/normalized" ]]; then
+                    echo "  • Scoring: $ASSIGNMENT_DIR/processed/normalized/"
+                    echo "    Review scoring schemes before dashboard adjustment"
+                fi
             done
             echo
-            log_info "When assessments look reasonable, continue with Round 3:"
+            log_info "When scoring schemes look reasonable, continue with Round 4:"
             echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 5"
             ;;
         5)
@@ -386,30 +411,7 @@ if [[ -n "$STOP_AFTER" ]]; then
                 echo "  jupyter notebook \"$ASSIGNMENT_DIR/processed/adjustment_dashboard.ipynb\""
             done
             echo
-            log_info "After approving all schemes, continue with Round 4:"
-            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 6"
-            ;;
-        6)
-            log_info "✓ Stage 6 (Unifier Agents) complete for all assignments"
-            echo
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "REVIEW REQUIRED: Final student feedback cards"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo
-            echo "Review final feedback before distribution:"
-            for assignment in "${ASSIGNMENTS[@]}"; do
-                if [[ "$assignment" = /* ]]; then
-                    ASSIGNMENT_DIR="$assignment"
-                else
-                    ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
-                fi
-                echo
-                echo "📁 $assignment"
-                echo "  • Feedback: $ASSIGNMENT_DIR/processed/final/"
-                echo "    Sample feedback cards to ensure quality"
-            done
-            echo
-            log_info "When feedback looks good, complete with Round 5:"
+            log_info "After approving all schemes, complete with Round 5:"
             echo "  $(basename "$0") $ASSIGNMENTS_FILE"
             ;;
     esac
