@@ -831,6 +831,63 @@ Creates `overview.md` template for new assignments:
 ./utils/create_overview.sh assignments/new-assignment
 ```
 
+### Batch Marking (`utils/batch_mark.sh`)
+
+Process multiple assignments in stages to optimize instructor workflow. This groups all interactive steps together across assignments to minimize waiting time.
+
+**Setup:**
+
+Create a text file listing assignment directories (one per line):
+
+```text
+# my_assignments.txt
+assignments/lab1
+assignments/lab2
+assignments/project-phase1
+```
+
+**Recommended Workflow:**
+
+```bash
+# Round 1: Run all assignments through pattern design (Stage 2)
+./utils/batch_mark.sh my_assignments.txt --stop-after 2
+# → Instructor reviews ALL pattern designs in one session
+
+# Round 2: Run all assignments through normalization (Stage 4)
+./utils/batch_mark.sh my_assignments.txt --stop-after 4
+# → Instructor reviews ALL adjustment dashboards in one session
+
+# Round 3: Run all assignments through unification (Stage 6)
+./utils/batch_mark.sh my_assignments.txt --stop-after 6
+# → Optional checkpoint before final aggregation
+
+# Round 4: Complete all assignments
+./utils/batch_mark.sh my_assignments.txt
+# → Final grades generated for all assignments
+```
+
+**Benefits:**
+
+- **Minimizes context switching**: Review all pattern designs at once, all dashboards at once
+- **Reduces idle time**: No waiting between stages for individual assignments
+- **Automatic resume**: Uses `--resume` by default to skip completed work
+- **Auto-detection**: Automatically detects structured vs freeform assignments
+
+**Options:**
+
+```bash
+# Override parallel tasks for all assignments
+./utils/batch_mark.sh assignments.txt --parallel 8
+
+# Start fresh (ignore previous progress)
+./utils/batch_mark.sh assignments.txt --no-resume
+
+# Custom stopping point
+./utils/batch_mark.sh assignments.txt --stop-after 3
+```
+
+See `assignments/assignments.txt.example` for file format.
+
 ## Troubleshooting
 
 ### "No submissions found"

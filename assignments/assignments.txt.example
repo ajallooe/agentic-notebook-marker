@@ -1,0 +1,19 @@
+# Batch Marking Assignment List
+#
+# List assignment directories to process, one per line.
+# Lines starting with # are comments and will be ignored.
+# Blank lines are also ignored.
+#
+# Paths can be:
+#   - Relative to project root: assignments/lab1
+#   - Absolute paths: /full/path/to/assignment
+#
+# Example assignments:
+
+assignments/Lab 01 - Introduction to ML
+assignments/Lab 02 - Decision Tree Classifier
+assignments/Project Phase 1 - Problem Understanding and Manual Prediction
+
+# Uncomment to include more:
+# assignments/Lab 03 - Neural Networks
+# assignments/Final Project
