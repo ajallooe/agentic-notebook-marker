@@ -129,8 +129,8 @@ def run_translator(assignment_name: str, total_marks: int, assignment_type: str,
     if model:
         cmd.extend(['--model', model])
 
-    # Run the interactive agent session
-    result = subprocess.run(cmd, check=False)
+    # Run the interactive agent session - inherit stdin/stdout/stderr for TTY access
+    result = subprocess.run(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
 
     if result.returncode != 0:
         print(f"\nError: Translator agent failed with exit code {result.returncode}")

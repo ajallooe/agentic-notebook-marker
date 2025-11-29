@@ -87,12 +87,25 @@ call_claude() {
     fi
 
     if [[ "$mode" == "interactive" ]]; then
-        # Interactive mode - use stdin to provide initial prompt
+        # Interactive mode - pass prompt as argument to keep stdin open for user interaction
+        # Use script command to capture output while maintaining TTY for true interactivity
         if [[ -n "$output" ]]; then
-            # Capture session output using tee instead of script
-            echo "$prompt" | claude $model_arg 2>&1 | tee "$output"
+            if command -v script &> /dev/null; then
+                # Use script for proper TTY handling and output capture
+                # macOS and Linux have different script syntax
+                if [[ "$(uname)" == "Darwin" ]]; then
+                    script -q "$output" claude $model_arg "$prompt"
+                else
+                    script -q -c "claude $model_arg \"$prompt\"" "$output"
+                fi
+            else
+                # Fallback: run without capture if script not available
+                echo "Warning: 'script' command not found, session won't be captured" >&2
+                claude $model_arg "$prompt"
+            fi
         else
-            echo "$prompt" | claude $model_arg
+            # No output capture needed, just run interactively
+            claude $model_arg "$prompt"
         fi
     else
         # Headless mode - use --print for non-interactive output
@@ -125,12 +138,25 @@ call_gemini() {
     fi
 
     if [[ "$mode" == "interactive" ]]; then
-        # Interactive mode - use stdin to provide initial prompt
+        # Interactive mode - pass prompt as argument to keep stdin open for user interaction
+        # Use script command to capture output while maintaining TTY for true interactivity
         if [[ -n "$output" ]]; then
-            # Capture session output using tee instead of script
-            echo "$prompt" | gemini $model_arg 2>&1 | tee "$output"
+            if command -v script &> /dev/null; then
+                # Use script for proper TTY handling and output capture
+                # macOS and Linux have different script syntax
+                if [[ "$(uname)" == "Darwin" ]]; then
+                    script -q "$output" gemini $model_arg "$prompt"
+                else
+                    script -q -c "gemini $model_arg \"$prompt\"" "$output"
+                fi
+            else
+                # Fallback: run without capture if script not available
+                echo "Warning: 'script' command not found, session won't be captured" >&2
+                gemini $model_arg "$prompt"
+            fi
         else
-            echo "$prompt" | gemini $model_arg
+            # No output capture needed, just run interactively
+            gemini $model_arg "$prompt"
         fi
     else
         # Headless mode - use positional prompt for one-shot execution

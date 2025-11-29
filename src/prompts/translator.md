@@ -69,19 +69,35 @@ For each student in grades.csv, find their corresponding entry in a gradebook:
 
 ### 3. Handle Edge Cases
 
-**DO NOT ASK QUESTIONS** - You cannot receive responses in this session. Instead, handle all cases automatically and flag issues in the JSON for later review.
+**This is an INTERACTIVE session** - You can ask the instructor questions and wait for responses.
 
 **Section mismatches**:
-- Multiple submission sections, one gradebook → OK, proceed with warning in JSON
-- One submission section, multiple gradebooks → OK, proceed with warning in JSON
+- Multiple submission sections, one gradebook → OK, warn instructor but proceed
+- One submission section, multiple gradebooks → OK, warn instructor but proceed
 
-**For issues, include them in the JSON**:
-- **Duplicate student**: Include in first gradebook found, add to `warnings` array
-- **Student not found**: Add to `unmatched_grades` array with reason
-- **Low confidence match** (80-89%): Include the match but set `"requires_review": true`
-- **Very low confidence** (<80%): Do NOT match, add to `unmatched_grades`
+**When to ask the instructor**:
+- **Low confidence match** (80-89%): Ask to confirm before including
+- **Very low confidence** (<80%): Ask what to do (match anyway, skip, or manual entry)
+- **Student not found**: Ask if they should be skipped or manually added
+- **Duplicate student** in multiple gradebooks: Ask which gradebook to use
 
-The instructor will review the JSON file before applying.
+**Format for questions**:
+```
+QUESTION: [Description of the issue]
+
+For student "[Name in grades.csv]":
+  - Best match found: "[Name in gradebook]" (confidence: X%)
+  - Match method: [exact/reverse/nickname/fuzzy]
+
+Options:
+  1) Accept this match
+  2) Skip this student (will not be updated in gradebook)
+  3) Enter correct gradebook name manually
+
+Your choice (1/2/3):
+```
+
+Wait for the instructor's response before proceeding to the next issue.
 
 ### 4. Create Mapping JSON
 
@@ -176,13 +192,13 @@ The system will save your JSON to: `{output_path}/translation_mapping.json`
 ## Interaction Flow
 
 1. **Analyze** both CSV contents provided above
-2. **Match** students using the strategies listed
-3. **Flag issues** in the JSON (do NOT ask questions - just flag for review)
-4. **Output the mapping JSON** between the markers above
-5. **Report** → Show summary including any items flagged for review
+2. **Match** students using the strategies listed (high confidence matches first)
+3. **For each uncertain match**: Ask the instructor and wait for response
+4. **After all issues resolved**: Output the mapping JSON between the markers
+5. **Report** → Show summary of matches
 6. **Signal completion**: "Mapping complete. Review and apply with apply_translation.py"
 
-**IMPORTANT**: Output the JSON immediately after analysis. Do not wait for user input.
+**IMPORTANT**: This is interactive - ask questions one at a time and wait for responses.
 
 ## Example Matching
 
