@@ -27,9 +27,29 @@ def load_prompt_template() -> str:
         return f.read()
 
 
-def count_feedback_cards(feedback_dir: Path) -> int:
-    """Count the number of feedback cards."""
-    return len(list(feedback_dir.glob("*_feedback.md")))
+def load_feedback_cards(feedback_dir: Path) -> tuple:
+    """Load all feedback card files and return (count, content)."""
+    cards = []
+    for card_file in sorted(feedback_dir.glob("*_feedback.md")):
+        try:
+            with open(card_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            student_name = card_file.stem.replace('_feedback', '')
+            cards.append(f"### {student_name}\n\n```\n{content}\n```")
+        except Exception as e:
+            print(f"Warning: Could not read {card_file}: {e}")
+
+    return len(cards), "\n\n---\n\n".join(cards)
+
+
+def read_csv_content(csv_path: str) -> str:
+    """Read CSV file content with encoding fallback."""
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        with open(csv_path, 'r', encoding='latin-1') as f:
+            return f.read()
 
 
 def main():
@@ -89,18 +109,19 @@ def main():
         # Load prompt template
         prompt_template = load_prompt_template()
 
-        # Count feedback cards
+        # Load all feedback cards
         feedback_dir = Path(args.feedback_dir)
-        total_students = count_feedback_cards(feedback_dir)
+        total_students, feedback_cards_content = load_feedback_cards(feedback_dir)
 
         if total_students == 0:
             print(f"✗ No feedback cards found in {feedback_dir}", file=sys.stderr)
             sys.exit(1)
 
-        # Check for base CSV
+        # Check for base CSV and load content if provided
         base_csv_info = ""
         if args.base_csv and Path(args.base_csv).exists():
-            base_csv_info = f"Base CSV provided: {args.base_csv}\nPlease merge student data with this file."
+            base_csv_content = read_csv_content(args.base_csv)
+            base_csv_info = f"Base CSV provided. Please merge student data with this file.\n\n```csv\n{base_csv_content}\n```"
         else:
             base_csv_info = "No base CSV provided. Create a new CSV from scratch."
 
@@ -110,10 +131,9 @@ def main():
             assignment_type=args.type,
             total_students=total_students,
             total_marks=args.total_marks,
-            feedback_cards_directory=str(feedback_dir),
+            feedback_cards_content=feedback_cards_content,
             base_csv_info=base_csv_info,
-            output_path=args.output_dir,
-            current_date=subprocess.check_output(['date'], text=True).strip()
+            output_path=args.output_dir
         )
 
         # Save prompt for debugging

@@ -42,7 +42,7 @@ log_error() {
 
 # Parse arguments
 DRY_RUN=false
-APPLY=false
+APPLY=true  # Default to apply
 SKIP_MAPPING=false
 
 GRADEBOOK_PATHS=()
@@ -62,10 +62,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
-            shift
-            ;;
-        --apply)
-            APPLY=true
+            APPLY=false
             shift
             ;;
         --skip-mapping)
@@ -98,16 +95,14 @@ Required:
   --gradebooks <csv1> <csv2> ... One or more gradebook CSV files to update
 
 Options:
-  --dry-run                      Preview changes without updating files
-  --apply                        Actually apply updates (default: dry-run)
+  --dry-run                      Preview changes without updating files (optional)
   --skip-mapping                 Skip mapping creation, use existing mapping file
   --provider <provider>          LLM provider (claude, gemini, codex)
   --model <model>                Specific model to use
 
 Example:
   $0 --assignment-dir "assignments/Lab 02" \\
-     --gradebooks section1.csv section2.csv \\
-     --dry-run
+     --gradebooks section1.csv section2.csv
 EOF
     exit 1
 fi
@@ -223,13 +218,7 @@ if command -v jq &> /dev/null; then
     echo ""
 fi
 
-if [[ $DRY_RUN == false && $APPLY == false ]]; then
-    log_warning "Running in DRY RUN mode by default"
-    log_info "Use --apply to actually update gradebook files"
-    DRY_RUN=true
-fi
-
-read -p "Press Enter to continue with $([ "$APPLY" = true ] && echo "APPLY" || echo "DRY RUN") mode, or Ctrl+C to cancel..."
+read -p "Press Enter to continue with $([ "$DRY_RUN" = true ] && echo "DRY RUN" || echo "APPLY") mode, or Ctrl+C to cancel..."
 
 # ============================================================================
 # STAGE 3: Apply Translation (Deterministic)
@@ -270,15 +259,15 @@ log_info "Results:"
 log_info "  Mapping file: $MAPPING_FILE"
 log_info "  Translation report: $TRANSLATION_DIR/translation_report.txt"
 
-if [[ $APPLY == true ]]; then
+if [[ $DRY_RUN == true ]]; then
+    log_warning "DRY RUN completed - no files were modified"
+    log_info "To apply changes, run without --dry-run:"
+    log_info "  ./utils/translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" \\"
+    log_info "    --gradebooks ${GRADEBOOK_PATHS[@]} \\"
+    log_info "    --skip-mapping"
+else
     log_info "  Updated gradebooks: $TRANSLATION_DIR/*.csv"
     log_info "  Backups: $TRANSLATION_DIR/*_backup.csv"
-else
-    log_warning "DRY RUN completed - no files were modified"
-    log_info "To apply changes, run:"
-    log_info "  ./translate_grades.sh --assignment-dir \"$ASSIGNMENT_DIR\" \\"
-    log_info "    --gradebooks ${GRADEBOOK_PATHS[@]} \\"
-    log_info "    --skip-mapping --apply"
 fi
 
 echo ""

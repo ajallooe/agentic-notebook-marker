@@ -10,12 +10,11 @@ Compile all student assessments into a properly formatted CSV file that can be u
 
 **DO NOT write Python code or scripts**. Instead:
 
-1. **Use the `read_file` tool** to read each feedback card file directly
-2. **Parse the content textually** - extract student names, marks, and feedback using pattern matching
-3. **Generate the CSV content as text** - create properly formatted CSV rows as a text string
-4. **Output the CSV content directly** - the aggregator wrapper will save it to the file
+1. **Parse the feedback cards provided below** - extract student names, marks, and feedback using pattern matching
+2. **Generate the CSV content as text** - create properly formatted CSV rows as a text string
+3. **Save the CSV file** to the output path specified below
 
-You have access to standard file reading tools. Simply read the files, process the text, and output the CSV content. Do NOT attempt to create Python scripts or use shell commands - work directly with the text content.
+**IMPORTANT**: All feedback card contents are provided below. Do NOT attempt to read external files - use the data provided here.
 
 ## Assignment Information
 
@@ -24,12 +23,11 @@ You have access to standard file reading tools. Simply read the files, process t
 **Total Students**: {total_students}
 **Total Marks**: {total_marks}
 
-## Input Data
+## Feedback Cards Content
 
-You have access to {total_students} student feedback cards in:
-```
-{feedback_cards_directory}
-```
+The following are all {total_students} student feedback cards:
+
+{feedback_cards_content}
 
 ## Base CSV (if provided)
 
@@ -176,13 +174,13 @@ John demonstrated strong understanding...
 
 ## Interaction Protocol
 
-1. Read all feedback card files
-2. Extract data systematically
-3. If base CSV provided, load and match students
+1. Parse all feedback cards provided above
+2. Extract data systematically (student names, marks, feedback)
+3. If base CSV provided, match students by name
 4. Generate CSV with proper formatting
 5. Calculate statistics
 6. Create summary and discrepancy reports
-7. Save all files to specified output directory
+7. Save CSV to `{output_path}/grades.csv`
 8. Display summary to instructor
 9. Signal completion: **"Aggregation complete. Files saved to {output_path}"**
 

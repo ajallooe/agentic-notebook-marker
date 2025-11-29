@@ -222,9 +222,10 @@ def main():
     parser.add_argument('--mapping', required=True, help='Path to translation_mapping.json')
     parser.add_argument('--output-dir', help='Directory to save updated gradebooks (default: same as mapping)')
     parser.add_argument('--dry-run', action='store_true',
-                       help='Preview changes without actually updating files')
+                       help='Preview changes without actually updating files (optional)')
+    # Keep --apply for backwards compatibility but it's now the default
     parser.add_argument('--apply', action='store_true',
-                       help='Actually apply the updates (opposite of --dry-run)')
+                       help='(deprecated) Apply is now the default behavior')
 
     args = parser.parse_args()
 
@@ -245,8 +246,8 @@ def main():
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine mode
-    dry_run = not args.apply if args.apply else args.dry_run
+    # Dry-run only if explicitly requested
+    dry_run = args.dry_run
 
     if dry_run:
         print("\n" + "=" * 70)
@@ -269,8 +270,8 @@ def main():
     generate_report(mapping, results, output_dir, dry_run)
 
     if dry_run:
-        print("\nTo apply these changes, run:")
-        print(f"  python3 src/apply_translation.py --mapping {mapping_path} --apply")
+        print("\nTo apply these changes, run without --dry-run:")
+        print(f"  python3 src/apply_translation.py --mapping {mapping_path}")
 
     return 0
 
