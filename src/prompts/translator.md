@@ -172,23 +172,21 @@ After resolving any issues, create this JSON structure and save it:
 
 ### 5. Output the Mapping
 
-Since you may not have file write capability, output the final JSON between these exact markers so the system can save it:
+Output the complete JSON mapping between these two marker lines:
 
+**Start marker:** `===MAPPING_JSON_START===`
+**End marker:** `===MAPPING_JSON_END===`
+
+The JSON structure was shown in section 4 above. Output the FULL JSON with all student mappings between those markers.
+
+Example of correct output format:
 ```
 ===MAPPING_JSON_START===
-{
-  "assignment_name": "...",
-  ... your actual complete JSON mapping ...
-}
+{"assignment_name": "Lab 1", "total_marks": 100, ...full JSON here...}
 ===MAPPING_JSON_END===
 ```
 
-**IMPORTANT**: Replace the example above with your ACTUAL JSON data. Do not output placeholder text.
-
-Then display a summary report showing:
-- How many students matched
-- Any warnings or issues
-- Statistics
+Then display a summary report.
 
 ## Output Path
 
