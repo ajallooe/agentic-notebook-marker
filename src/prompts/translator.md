@@ -182,7 +182,7 @@ The JSON structure was shown in section 4 above. Output the FULL JSON with all s
 Example of correct output format:
 ```
 ===MAPPING_JSON_START===
-{"assignment_name": "Lab 1", "total_marks": 100, ...full JSON here...}
+{{"assignment_name": "Lab 1", "total_marks": 100, ...full JSON here...}}
 ===MAPPING_JSON_END===
 ```
 
