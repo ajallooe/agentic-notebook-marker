@@ -138,26 +138,28 @@ call_gemini() {
     fi
 
     if [[ "$mode" == "interactive" ]]; then
-        # Interactive mode - pass prompt as argument to keep stdin open for user interaction
-        # Use script command to capture output while maintaining TTY for true interactivity
+        # Interactive mode - gemini exits after one response when prompt is passed as argument
+        # So we save prompt to temp file and pipe it with stdin for continued interaction
+        local prompt_file=$(mktemp)
+        echo "$prompt" > "$prompt_file"
+
         if [[ -n "$output" ]]; then
+            # Use cat to send prompt first, then continue reading from terminal
+            # script maintains TTY for proper interactivity
             if command -v script &> /dev/null; then
-                # Use script for proper TTY handling and output capture
-                # macOS and Linux have different script syntax
                 if [[ "$(uname)" == "Darwin" ]]; then
-                    script -q "$output" gemini $model_arg "$prompt"
+                    script -q "$output" bash -c "cat '$prompt_file' - | gemini $model_arg"
                 else
-                    script -q -c "gemini $model_arg \"$prompt\"" "$output"
+                    script -q -c "cat '$prompt_file' - | gemini $model_arg" "$output"
                 fi
             else
-                # Fallback: run without capture if script not available
-                echo "Warning: 'script' command not found, session won't be captured" >&2
-                gemini $model_arg "$prompt"
+                cat "$prompt_file" - | gemini $model_arg 2>&1 | tee "$output"
             fi
         else
-            # No output capture needed, just run interactively
-            gemini $model_arg "$prompt"
+            cat "$prompt_file" - | gemini $model_arg
         fi
+
+        rm -f "$prompt_file"
     else
         # Headless mode - use positional prompt for one-shot execution
         # Enable YOLO mode for automated execution (auto-approve all tools)
