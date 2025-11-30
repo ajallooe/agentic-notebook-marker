@@ -172,13 +172,18 @@ After resolving any issues, create this JSON structure and save it:
 
 ### 5. Output the Mapping
 
-Since you may not have file write capability, output the final JSON in this exact format so the system can save it:
+Since you may not have file write capability, output the final JSON between these exact markers so the system can save it:
 
 ```
 ===MAPPING_JSON_START===
-[your complete JSON here]
+{
+  "assignment_name": "...",
+  ... your actual complete JSON mapping ...
+}
 ===MAPPING_JSON_END===
 ```
+
+**IMPORTANT**: Replace the example above with your ACTUAL JSON data. Do not output placeholder text.
 
 Then display a summary report showing:
 - How many students matched
