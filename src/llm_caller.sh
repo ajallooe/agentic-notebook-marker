@@ -223,7 +223,15 @@ call_claude() {
     if [[ "$MODE" == "interactive" ]]; then
         # Interactive mode: prompt as positional argument
         if [[ -n "$OUTPUT_FILE" ]]; then
-            claude "${cmd_args[@]}" "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+            # Use script command to preserve TTY while capturing output
+            # -q for quiet mode, -F for flush after each write
+            if [[ "$(uname)" == "Darwin" ]]; then
+                # macOS script syntax
+                script -q "$OUTPUT_FILE" claude "${cmd_args[@]}" "$PROMPT"
+            else
+                # Linux script syntax
+                script -q -c "claude ${cmd_args[*]} \"$PROMPT\"" "$OUTPUT_FILE"
+            fi
         else
             claude "${cmd_args[@]}" "$PROMPT"
         fi
@@ -268,7 +276,12 @@ call_gemini() {
     if [[ "$MODE" == "interactive" ]]; then
         # Interactive mode: use -i flag
         if [[ -n "$OUTPUT_FILE" ]]; then
-            gemini "${cmd_args[@]}" -i "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+            # Use script command to preserve TTY while capturing output
+            if [[ "$(uname)" == "Darwin" ]]; then
+                script -q "$OUTPUT_FILE" gemini "${cmd_args[@]}" -i "$PROMPT"
+            else
+                script -q -c "gemini ${cmd_args[*]} -i \"$PROMPT\"" "$OUTPUT_FILE"
+            fi
         else
             gemini "${cmd_args[@]}" -i "$PROMPT"
         fi
@@ -320,8 +333,12 @@ call_codex() {
         fi
 
         if [[ -n "$OUTPUT_FILE" ]]; then
-            echo "Note: Codex interactive output capture is limited" >&2
-            codex "${cmd_args[@]}" "$PROMPT"
+            # Use script command to preserve TTY while capturing output
+            if [[ "$(uname)" == "Darwin" ]]; then
+                script -q "$OUTPUT_FILE" codex "${cmd_args[@]}" "$PROMPT"
+            else
+                script -q -c "codex ${cmd_args[*]} \"$PROMPT\"" "$OUTPUT_FILE"
+            fi
         else
             codex "${cmd_args[@]}" "$PROMPT"
         fi
