@@ -138,28 +138,12 @@ call_gemini() {
     fi
 
     if [[ "$mode" == "interactive" ]]; then
-        # Interactive mode - gemini exits after one response when prompt is passed as argument
-        # So we save prompt to temp file and pipe it with stdin for continued interaction
-        local prompt_file=$(mktemp)
-        echo "$prompt" > "$prompt_file"
-
+        # Interactive mode - use -i flag to start interactive session with initial prompt
         if [[ -n "$output" ]]; then
-            # Use cat to send prompt first, then continue reading from terminal
-            # script maintains TTY for proper interactivity
-            if command -v script &> /dev/null; then
-                if [[ "$(uname)" == "Darwin" ]]; then
-                    script -q "$output" bash -c "cat '$prompt_file' - | gemini $model_arg"
-                else
-                    script -q -c "cat '$prompt_file' - | gemini $model_arg" "$output"
-                fi
-            else
-                cat "$prompt_file" - | gemini $model_arg 2>&1 | tee "$output"
-            fi
+            gemini $model_arg -i "$prompt" 2>&1 | tee "$output"
         else
-            cat "$prompt_file" - | gemini $model_arg
+            gemini $model_arg -i "$prompt"
         fi
-
-        rm -f "$prompt_file"
     else
         # Headless mode - use positional prompt for one-shot execution
         # Enable YOLO mode for automated execution (auto-approve all tools)
