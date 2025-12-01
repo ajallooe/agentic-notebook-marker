@@ -54,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_XARGS=true
             shift
             ;;
+        --resume)
+            RESUME=true
+            shift
+            ;;
         --no-resume)
             RESUME=false
             shift
@@ -106,6 +110,7 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "  --provider NAME         Override default_provider from overview.md"
     echo "  --model NAME            Override default_model from overview.md"
     echo "  --force-xargs           Force use of xargs instead of GNU parallel"
+    echo "  --resume                Resume from last checkpoint (default)"
     echo "  --no-resume             Start from scratch, don't resume"
     echo "  --clean                 Remove processed directory and start fresh"
     echo "  --no-clean-artifacts    Disable artifact cleaning of grades.csv"
