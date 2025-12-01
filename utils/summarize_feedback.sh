@@ -33,6 +33,8 @@ usage() {
 Usage: $(basename "$0") <grades.csv> [OPTIONS]
 
 Summarize detailed feedback cards into single plain text paragraphs.
+Creates 3-4 sentence summaries focusing on mistakes and positives.
+For very low marks (<40%), provides more detailed explanations.
 
 Arguments:
   grades.csv              Path to the grades CSV file (with Feedback Card column)
@@ -41,6 +43,7 @@ Options:
   --output <file>         Output CSV file (default: <input>_summarized.csv)
   --provider <provider>   LLM provider: claude, gemini, codex (default: claude)
   --model <model>         Specific model to use (optional)
+  --total-marks <n>       Total possible marks (default: 100)
   --feedback-col <name>   Name of feedback column (auto-detected if not specified)
   --dry-run               Preview without calling LLM
   --help                  Show this help message
@@ -51,6 +54,9 @@ Examples:
 
   # Use Gemini with specific model
   ./utils/summarize_feedback.sh grades.csv --provider gemini --model gemini-2.5-pro
+
+  # Specify total marks if not 100
+  ./utils/summarize_feedback.sh grades.csv --total-marks 50
 
   # Specify output file
   ./utils/summarize_feedback.sh grades.csv --output summaries.csv
@@ -75,7 +81,7 @@ while [[ $# -gt 0 ]]; do
         --help)
             usage
             ;;
-        --output|--provider|--model|--feedback-col)
+        --output|--provider|--model|--feedback-col|--total-marks)
             EXTRA_ARGS+=("$1" "$2")
             shift 2
             ;;

@@ -21,21 +21,23 @@ LLM_CALLER = PROJECT_ROOT / "src" / "llm_caller.sh"
 SUMMARIZE_PROMPT = """You are a feedback summarizer. Your task is to condense the following detailed feedback into a single, concise plain text paragraph.
 
 Requirements:
-1. Keep it to 2-4 sentences maximum
-2. Include the total mark prominently at the start
-3. Mention key strengths (if any)
-4. Mention the most significant issues/deductions (if any)
+1. Write 3-4 sentences for most students
+2. Focus primarily on MISTAKES and what they got wrong - be specific about the key issues
+3. Also mention any notable POSITIVES or strengths (if any)
+4. Start with the total mark
 5. Use plain text only - no markdown, no bullet points, no special formatting
 6. Be constructive and professional in tone
-7. Do NOT include activity-by-activity breakdowns - summarize overall performance
+7. Do NOT include activity-by-activity breakdowns - summarize the overall patterns
+
+IMPORTANT: For students with very low marks (below 40%), you may write 2-3 additional sentences to explain the major issues that caused the low score. This helps them understand what went wrong.
 
 Student: {student_name}
-Total Mark: {total_mark}
+Total Mark: {total_mark} / {total_possible}
 
 Detailed Feedback:
 {feedback}
 
-Write a single paragraph summary (plain text only):"""
+Write a single paragraph summary (plain text only, 3-4 sentences, or 5-6 for very low marks):"""
 
 
 def load_grades_csv(csv_path: Path) -> list:
@@ -84,7 +86,7 @@ def call_llm(prompt: str, provider: str, model: str = None) -> str:
 
 
 def summarize_feedback(student_name: str, total_mark: str, feedback: str,
-                       provider: str, model: str = None) -> str:
+                       provider: str, model: str = None, total_possible: int = 100) -> str:
     """Use LLM to summarize feedback into a single paragraph."""
 
     if not feedback or not feedback.strip():
@@ -93,6 +95,7 @@ def summarize_feedback(student_name: str, total_mark: str, feedback: str,
     prompt = SUMMARIZE_PROMPT.format(
         student_name=student_name,
         total_mark=total_mark,
+        total_possible=total_possible,
         feedback=feedback
     )
 
@@ -183,6 +186,12 @@ def main():
         help='Specific model to use (optional)'
     )
     parser.add_argument(
+        '--total-marks',
+        type=int,
+        default=100,
+        help='Total possible marks for the assignment (default: 100)'
+    )
+    parser.add_argument(
         '--feedback-col',
         help='Name of the feedback column (auto-detected if not specified)'
     )
@@ -236,7 +245,8 @@ def main():
                 total_mark=total_mark,
                 feedback=feedback,
                 provider=args.provider,
-                model=args.model
+                model=args.model,
+                total_possible=args.total_marks
             )
             print("done")
 
