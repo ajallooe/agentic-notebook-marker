@@ -46,6 +46,7 @@ CLEAN_ARTIFACTS=true  # Clean artifacts by default
 STOP_AFTER_STAGE=""
 PARALLEL_OVERRIDE=""
 AUTO_APPROVE=false
+FORCE_COMPLETE=false
 PROVIDER_OVERRIDE=""
 MODEL_OVERRIDE=""
 
@@ -79,6 +80,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --auto-approve)
             AUTO_APPROVE=true
+            shift
+            ;;
+        --force-complete)
+            FORCE_COMPLETE=true
             shift
             ;;
         --provider)
@@ -115,6 +120,7 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "  --stop-after N        Stop after completing stage N (1-8)"
     echo "  --parallel N          Override max parallel tasks (default from config)"
     echo "  --auto-approve        Skip interactive stages (pattern design, dashboard approval)"
+    echo "  --force-complete      Generate zero-mark feedback for failed students and continue"
     echo "  --provider NAME       Override LLM provider (claude, gemini, or codex)"
     echo "  --model NAME          Override model name"
     exit 1
@@ -548,6 +554,39 @@ else
     "$SRC_DIR/parallel_runner.sh" "${UNIFIER_ARGS[@]}"
 
     log_success "Unifier agents completed"
+fi
+
+# Check for missing feedback files and handle with --force-complete
+FEEDBACK_COUNT=$(find "$FINAL_DIR" -maxdepth 1 -name "*_feedback.md" 2>/dev/null | wc -l | tr -d ' ')
+if [[ $FEEDBACK_COUNT -lt $NUM_STUDENTS ]]; then
+    MISSING_COUNT=$((NUM_STUDENTS - FEEDBACK_COUNT))
+    log_warning "$MISSING_COUNT student(s) missing feedback files"
+
+    if [[ "$FORCE_COMPLETE" == true ]]; then
+        log_info "Force-completing: generating zero-mark feedback for failed students..."
+
+        python3 "$SRC_DIR/utils/force_complete.py" \
+            "$ASSIGNMENT_DIR" \
+            --total-marks "$TOTAL_MARKS" \
+            --type freeform
+
+        if [[ $? -ne 0 ]]; then
+            log_error "Force complete failed"
+            exit 1
+        fi
+
+        log_success "Zero-mark feedback generated for $MISSING_COUNT student(s)"
+        log_warning "These students require manual review!"
+    else
+        log_error "Cannot continue: $MISSING_COUNT student(s) failed to process"
+        log_info "To see error details, run:"
+        log_info "  ./review_errors.sh \"$ASSIGNMENT_DIR\""
+        log_info ""
+        log_info "Options:"
+        log_info "  1. Fix the errors and re-run (resume will pick up where it left off)"
+        log_info "  2. Use --force-complete to assign zero marks to failed students"
+        exit 1
+    fi
 fi
 
 # Stop after stage 6 if requested

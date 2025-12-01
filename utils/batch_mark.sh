@@ -87,6 +87,7 @@ Options:
   --no-resume         Start fresh, ignore previous progress (default: resume)
   --start-round N     Start from round N (1-5, default: 1)
   --auto-approve      Skip interactive stages (pattern design, dashboard approval)
+  --force-complete    Generate zero-mark feedback for failed students and continue
   --help              Show this help message
 
 Automatic Workflow (5 rounds - runs continuously):
@@ -148,6 +149,7 @@ PROVIDER=""
 MODEL=""
 START_ROUND=1
 AUTO_APPROVE=false
+FORCE_COMPLETE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -173,6 +175,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --auto-approve)
             AUTO_APPROVE=true
+            shift
+            ;;
+        --force-complete)
+            FORCE_COMPLETE=true
             shift
             ;;
         --help)
@@ -244,6 +250,9 @@ if [[ "$START_ROUND" -gt 1 ]]; then
 fi
 if [[ "$AUTO_APPROVE" == true ]]; then
     log_info "Auto-approve mode: ENABLED (skipping interactive stages)"
+fi
+if [[ "$FORCE_COMPLETE" == true ]]; then
+    log_info "Force-complete mode: ENABLED (zero marks for failed students)"
 fi
 echo
 
@@ -396,6 +405,10 @@ run_stage_for_all() {
 
         if [[ "$AUTO_APPROVE" == true ]]; then
             cmd+=("--auto-approve")
+        fi
+
+        if [[ "$FORCE_COMPLETE" == true ]]; then
+            cmd+=("--force-complete")
         fi
 
         # Execute marking script
@@ -593,6 +606,10 @@ if [[ "$START_ROUND" -le 5 ]]; then
 
         if [[ "$AUTO_APPROVE" == true ]]; then
             cmd+=("--auto-approve")
+        fi
+
+        if [[ "$FORCE_COMPLETE" == true ]]; then
+            cmd+=("--force-complete")
         fi
 
         # Always resume in round 5
