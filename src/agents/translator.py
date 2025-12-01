@@ -77,31 +77,149 @@ def load_prompt_template(assignment_name: str, total_marks: int, assignment_type
     return prompt
 
 
+def strip_ansi_codes(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    import re
+    # Pattern matches ANSI escape sequences
+    ansi_pattern = r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[PX^_][^\x1b]*\x1b\\|\x1b\[[\?]?[0-9;]*[hl]'
+    return re.sub(ansi_pattern, '', text)
+
+
+def strip_line_numbers(text: str) -> str:
+    """Remove line number prefixes from text (e.g., '  1 {' -> '{')."""
+    import re
+    # Pattern matches line numbers at start of lines (with optional leading spaces)
+    # Handles formats like "  1 {", "  2   ", " 10 ", "277 }"
+    lines = text.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        # Remove leading line number pattern (spaces + digits + space)
+        cleaned = re.sub(r'^\s*\d+\s', '', line)
+        cleaned_lines.append(cleaned)
+    return '\n'.join(cleaned_lines)
+
+
 def extract_json_from_output(output_text: str) -> str:
     """Extract JSON from between the markers in agent output."""
     import re
 
-    # Look for JSON between markers - find all matches and take the one with actual JSON
-    pattern = r'===MAPPING_JSON_START===\s*(.*?)\s*===MAPPING_JSON_END==='
-    matches = re.findall(pattern, output_text, re.DOTALL)
+    # Strip ANSI escape codes first (from script command output)
+    clean_text = strip_ansi_codes(output_text)
 
-    for match in matches:
-        content = match.strip()
-        # Check if it looks like actual JSON (starts with {)
-        if content.startswith('{'):
-            return content
+    # Find the LAST occurrence of the markers (the final output, not earlier redraws)
+    last_start = clean_text.rfind('===MAPPING_JSON_START===')
+    last_end = clean_text.rfind('===MAPPING_JSON_END===')
+
+    best_match = None
+    if last_start > 0 and last_end > last_start:
+        # Extract content between last markers
+        best_match = clean_text[last_start + 24:last_end].strip()
+
+    # Fallback: if no markers found or content is too small, try regex
+    if not best_match or len(best_match) < 100:
+        pattern = r'===MAPPING_JSON_START===\s*(.*?)\s*===MAPPING_JSON_END==='
+        matches = re.findall(pattern, clean_text, re.DOTALL)
+
+        # Find valid matches (skip examples)
+        for match in reversed(matches):  # Check from last to first
+            content = match.strip()
+            if '...full JSON here...' in content:
+                continue
+            if len(content) < 100:
+                continue
+            best_match = content
+            break
+
+    if best_match:
+        # Strip line numbers if present (from Gemini TUI display)
+        cleaned = strip_line_numbers(best_match)
+
+        # Aggressive cleaning for TUI artifacts
+        # Remove box-drawing characters
+        cleaned = re.sub(r'[╭╮╯╰│─┬┴┼├┤]', '', cleaned)
+        # Remove spinner/loading characters
+        cleaned = re.sub(r'[⠼⠋⠹⠸⠴⠦⠧⠇⠏]', '', cleaned)
+
+        # Filter lines to keep only JSON-like content
+        lines = []
+        for line in cleaned.split('\n'):
+            stripped = line.strip()
+            # Skip empty lines
+            if not stripped:
+                continue
+            # Skip TUI status lines and notifications
+            if any(skip in line for skip in [
+                'Gemini CLI update', 'brew upgrade', 'Installed via',
+                'Generating', 'esc to cancel', 'open files', 'ctrl+g',
+                'Type your message', '@path/to/file', 'Using:',
+                'GEMINI.md', '>', '|'
+            ]):
+                continue
+            # Skip lines with arrows (usually status indicators)
+            if '→' in line and len(stripped) < 100:
+                continue
+            lines.append(line)
+
+        cleaned = '\n'.join(lines)
+
+        # Extract JSON by finding matching braces
+        import json
+
+        # Find the actual JSON start - look for {"assignment_name"
+        json_start_pattern = r'\{\s*"assignment_name"'
+        start_match = re.search(json_start_pattern, cleaned)
+        if not start_match:
+            # Fallback: just find first {
+            start_idx = cleaned.find('{')
+            if start_idx == -1:
+                return None
+        else:
+            start_idx = start_match.start()
+
+        # Count braces to find the end
+        brace_count = 0
+        end_idx = start_idx
+        for i, char in enumerate(cleaned[start_idx:], start_idx):
+            if char == '{':
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i
+                    break
+
+        if end_idx > start_idx:
+            candidate = cleaned[start_idx:end_idx + 1]
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                # Try to repair common issues
+                # Remove any remaining control characters
+                candidate = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', candidate)
+                try:
+                    json.loads(candidate)
+                    return candidate
+                except json.JSONDecodeError:
+                    pass
+
+        # Return best effort
+        json_match = re.search(r'(\{.*\})', cleaned, re.DOTALL)
+        if json_match:
+            return json_match.group(1).strip()
+        return cleaned
 
     # Fallback: look for a large JSON object with assignment_name
     # This pattern finds JSON objects that span multiple lines
     json_pattern = r'(\{\s*"assignment_name"\s*:.*?"summary"\s*:\s*\{[^}]+\}\s*\})'
-    match = re.search(json_pattern, output_text, re.DOTALL)
+    match = re.search(json_pattern, clean_text, re.DOTALL)
 
     if match:
         return match.group(1).strip()
 
     # Last resort: find any JSON object starting with {"assignment_name"
     simple_pattern = r'(\{"assignment_name".*\})\s*(?:===|$|\n\n)'
-    match = re.search(simple_pattern, output_text, re.DOTALL)
+    match = re.search(simple_pattern, clean_text, re.DOTALL)
 
     if match:
         return match.group(1).strip()
