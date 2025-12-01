@@ -45,6 +45,8 @@ RESUME=true  # Always resume by default
 CLEAN_ARTIFACTS=true  # Clean artifacts by default
 STOP_AFTER_STAGE=""
 PARALLEL_OVERRIDE=""
+PROVIDER_OVERRIDE=""
+MODEL_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -74,6 +76,14 @@ while [[ $# -gt 0 ]]; do
             PARALLEL_OVERRIDE="$2"
             shift 2
             ;;
+        --provider)
+            PROVIDER_OVERRIDE="$2"
+            shift 2
+            ;;
+        --model)
+            MODEL_OVERRIDE="$2"
+            shift 2
+            ;;
         -*)
             echo "Unknown option: $1" >&2
             echo "Usage: $0 <assignment_directory> [OPTIONS]" >&2
@@ -93,6 +103,8 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "Example: $0 assignments/lab1"
     echo ""
     echo "Options:"
+    echo "  --provider NAME         Override default_provider from overview.md"
+    echo "  --model NAME            Override default_model from overview.md"
     echo "  --force-xargs           Force use of xargs instead of GNU parallel"
     echo "  --no-resume             Start from scratch, don't resume"
     echo "  --clean                 Remove processed directory and start fresh"
@@ -124,9 +136,17 @@ fi
 # Parse configuration from overview.md
 eval "$("$SRC_DIR/utils/config_parser.py" "$OVERVIEW_FILE" --bash)"
 
+# Apply command-line overrides
+if [[ -n "$PROVIDER_OVERRIDE" ]]; then
+    DEFAULT_PROVIDER="$PROVIDER_OVERRIDE"
+fi
+if [[ -n "$MODEL_OVERRIDE" ]]; then
+    DEFAULT_MODEL="$MODEL_OVERRIDE"
+fi
+
 log_info "Configuration:"
-log_info "  Provider: $DEFAULT_PROVIDER"
-log_info "  Default model: ${DEFAULT_MODEL:-default}"
+log_info "  Provider: $DEFAULT_PROVIDER${PROVIDER_OVERRIDE:+ (overridden)}"
+log_info "  Default model: ${DEFAULT_MODEL:-default}${MODEL_OVERRIDE:+ (overridden)}"
 
 # Override MAX_PARALLEL if --parallel flag provided
 if [[ -n "$PARALLEL_OVERRIDE" ]]; then

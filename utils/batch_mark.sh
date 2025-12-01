@@ -60,12 +60,16 @@ log_error() {
 # Usage message
 usage() {
     cat << EOF
-Usage: $(basename "$0") ASSIGNMENTS_FILE [OPTIONS]
+Usage: $(basename "$0") ASSIGNMENTS_FILE --provider PROVIDER --model MODEL [OPTIONS]
 
 Batch process multiple assignments in stages to optimize instructor workflow.
 
 Arguments:
   ASSIGNMENTS_FILE    Text file with assignment paths (one per line)
+
+Required:
+  --provider NAME     LLM provider (claude, gemini, or codex)
+  --model NAME        Model name (e.g., claude-sonnet-4, gemini-2.5-pro, gpt-4o)
 
 Options:
   --stop-after N      Stop after stage N (1-9 for structured, 1-8 for freeform)
@@ -126,6 +130,8 @@ shift
 STOP_AFTER=""
 PARALLEL_OVERRIDE=""
 RESUME_FLAG="--resume"
+PROVIDER=""
+MODEL=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -135,6 +141,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --parallel)
             PARALLEL_OVERRIDE="$2"
+            shift 2
+            ;;
+        --provider)
+            PROVIDER="$2"
+            shift 2
+            ;;
+        --model)
+            MODEL="$2"
             shift 2
             ;;
         --resume)
@@ -154,6 +168,26 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Validate required arguments
+if [[ -z "$PROVIDER" ]]; then
+    log_error "--provider is required"
+    usage
+fi
+
+if [[ -z "$MODEL" ]]; then
+    log_error "--model is required"
+    usage
+fi
+
+# Validate provider
+case "$PROVIDER" in
+    claude|gemini|codex) ;;
+    *)
+        log_error "Invalid provider: $PROVIDER (must be claude, gemini, or codex)"
+        exit 1
+        ;;
+esac
 
 # Validate assignments file
 if [[ ! -f "$ASSIGNMENTS_FILE" ]]; then
@@ -177,7 +211,81 @@ if [[ ${#ASSIGNMENTS[@]} -eq 0 ]]; then
 fi
 
 log_info "Found ${#ASSIGNMENTS[@]} assignment(s) to process"
+log_info "Provider: $PROVIDER"
+log_info "Model: $MODEL"
 echo
+
+# ============================================================================
+# CHECK FOR MISSING OVERVIEW FILES
+# ============================================================================
+
+echo "=================================================================="
+log_info "Checking for missing overview.md files..."
+echo "=================================================================="
+echo
+
+MISSING_OVERVIEWS=()
+
+for assignment in "${ASSIGNMENTS[@]}"; do
+    if [[ "$assignment" = /* ]]; then
+        ASSIGNMENT_DIR="$assignment"
+    else
+        ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
+    fi
+
+    OVERVIEW_FILE="$ASSIGNMENT_DIR/overview.md"
+    if [[ ! -f "$OVERVIEW_FILE" ]]; then
+        MISSING_OVERVIEWS+=("$assignment")
+    fi
+done
+
+if [[ ${#MISSING_OVERVIEWS[@]} -gt 0 ]]; then
+    log_warning "Found ${#MISSING_OVERVIEWS[@]} assignment(s) missing overview.md:"
+    for assignment in "${MISSING_OVERVIEWS[@]}"; do
+        echo "  - $assignment"
+    done
+    echo
+
+    read -p "Generate overview.md for these assignments? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo
+        for assignment in "${MISSING_OVERVIEWS[@]}"; do
+            if [[ "$assignment" = /* ]]; then
+                ASSIGNMENT_DIR="$assignment"
+            else
+                ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
+            fi
+
+            log_info "Generating overview for: $assignment"
+
+            # Find the base notebook (first .ipynb file in assignment dir)
+            BASE_NOTEBOOK=$(find "$ASSIGNMENT_DIR" -maxdepth 1 -name "*.ipynb" -type f | head -1)
+
+            if [[ -z "$BASE_NOTEBOOK" ]]; then
+                log_warning "No .ipynb file found in $ASSIGNMENT_DIR, skipping..."
+                continue
+            fi
+
+            log_info "Using notebook: $(basename "$BASE_NOTEBOOK")"
+
+            # Run create_overview.sh
+            if "$SCRIPT_DIR/create_overview.sh" "$BASE_NOTEBOOK" --provider "$PROVIDER" --model "$MODEL"; then
+                log_success "Generated overview.md for $assignment"
+            else
+                log_error "Failed to generate overview.md for $assignment"
+            fi
+            echo
+        done
+    else
+        log_info "Skipping overview generation"
+        log_warning "Assignments without overview.md will fail during marking"
+    fi
+    echo
+else
+    log_success "All assignments have overview.md files"
+    echo
+fi
 
 # Display stage information
 if [[ -n "$STOP_AFTER" ]]; then
@@ -259,6 +367,10 @@ for i in "${!ASSIGNMENTS[@]}"; do
 
     # Build command
     CMD=("$MARK_SCRIPT" "$ASSIGNMENT_DIR")
+
+    # Add provider and model (required)
+    CMD+=("--provider" "$PROVIDER")
+    CMD+=("--model" "$MODEL")
 
     if [[ -n "$STOP_AFTER" ]]; then
         CMD+=("--stop-after" "$STOP_AFTER")
