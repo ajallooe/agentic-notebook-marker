@@ -53,16 +53,8 @@ def get_student_name_from_row(row: Dict[str, str], student_col: str, fieldnames:
     - Separate first/last name columns (e.g., Moodle exports)
     - Various capitalizations
     """
-    # Try the specified column first (for joined name formats)
-    if student_col in row and row[student_col].strip():
-        return row[student_col].strip()
-
-    # Check for common single-name columns
-    for col in ['Student Name', 'student_name', 'Name', 'name', 'Full Name', 'full_name']:
-        if col in row and row[col].strip():
-            return row[col].strip()
-
-    # Check for separate first/last name columns (Moodle-style)
+    # Check for separate first/last name columns FIRST (Moodle-style)
+    # This is the most common case for gradebook exports
     first_name = ''
     last_name = ''
 
@@ -78,7 +70,21 @@ def get_student_name_from_row(row: Dict[str, str], student_col: str, fieldnames:
 
     if first_name and last_name:
         return f"{first_name} {last_name}"
-    elif first_name:
+
+    # Try the specified column (for joined name formats)
+    if student_col in row and row[student_col].strip():
+        # Only use this if it's not one of the first/last name columns
+        if student_col not in ['First name', 'First Name', 'first_name', 'FirstName', 'first name',
+                               'Last name', 'Last Name', 'last_name', 'LastName', 'last name', 'Surname', 'surname']:
+            return row[student_col].strip()
+
+    # Check for common single-name columns
+    for col in ['Student Name', 'student_name', 'Name', 'name', 'Full Name', 'full_name']:
+        if col in row and row[col].strip():
+            return row[col].strip()
+
+    # Fallback to individual names if only one is available
+    if first_name:
         return first_name
     elif last_name:
         return last_name
