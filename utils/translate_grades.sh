@@ -171,6 +171,11 @@ if [[ $SKIP_MAPPING == true && -f "$MAPPING_FILE" ]]; then
     log_info "Stage 1: Skipping mapping creation (using existing mapping)"
     log_success "Mapping loaded: $MAPPING_FILE"
 else
+    # Fresh run - clean up translation directory
+    if [[ -d "$TRANSLATION_DIR" ]]; then
+        log_info "Cleaning translation directory for fresh run..."
+        rm -f "$TRANSLATION_DIR"/*.json "$TRANSLATION_DIR"/*.csv "$TRANSLATION_DIR"/*.txt "$TRANSLATION_DIR"/*.log 2>/dev/null || true
+    fi
     log_info "Stage 1: Creating translation mapping (LLM Agent)..."
     log_warning "This stage requires LLM interaction for fuzzy name matching"
 
@@ -266,8 +271,13 @@ if [[ $DRY_RUN == true ]]; then
     log_info "    --gradebooks ${GRADEBOOK_PATHS[@]} \\"
     log_info "    --skip-mapping"
 else
-    log_info "  Updated gradebooks: $TRANSLATION_DIR/*.csv"
-    log_info "  Backups: $TRANSLATION_DIR/*_backup.csv"
+    log_info "  Filled gradebooks created in original gradebook directories:"
+    for gradebook in "${GRADEBOOK_PATHS[@]}"; do
+        gradebook_name="$(basename "$gradebook" .csv)"
+        gradebook_dir="$(dirname "$gradebook")"
+        log_info "    - $gradebook_dir/${gradebook_name}_filled.csv"
+    done
+    log_info "  Copies also saved to: $TRANSLATION_DIR/"
 fi
 
 echo ""
