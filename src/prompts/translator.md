@@ -170,34 +170,22 @@ After resolving any issues, create this JSON structure and save it:
 }}
 ```
 
-### 5. Output the Mapping
+### 5. Save the Mapping File
 
-Output the complete JSON mapping between these two marker lines:
+**IMPORTANT**: Use your file writing tool to save the JSON directly to:
 
-**Start marker:** `===MAPPING_JSON_START===`
-**End marker:** `===MAPPING_JSON_END===`
+`{output_path}/translation_mapping.json`
 
-The JSON structure was shown in section 4 above. Output the FULL JSON with all student mappings between those markers.
+Do NOT just output the JSON to the terminal. Use your Write tool (or equivalent file creation capability) to create the file.
 
-Example of correct output format:
-```
-===MAPPING_JSON_START===
-{{"assignment_name": "Lab 1", "total_marks": 100, ...full JSON here...}}
-===MAPPING_JSON_END===
-```
-
-Then display a summary report.
-
-## Output Path
-
-The system will save your JSON to: `{output_path}/translation_mapping.json`
+After saving, display a summary report confirming the file was created.
 
 ## Interaction Flow
 
 1. **Analyze** both CSV contents provided above
 2. **Match** students using the strategies listed (high confidence matches first)
 3. **For each uncertain match**: Ask the instructor and wait for response
-4. **After all issues resolved**: Output the mapping JSON between the markers
+4. **After all issues resolved**: Use your Write tool to save the mapping JSON file
 5. **Report** → Show summary of matches
 6. **Signal completion**: "Mapping complete. Review and apply with apply_translation.py"
 
