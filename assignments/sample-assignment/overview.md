@@ -1,6 +1,6 @@
 ---
-default_provider: claude
-default_model: claude-sonnet-4
+default_provider:                  # Uses project default from configs/config.yaml
+default_model:                     # Uses provider's built-in default
 max_parallel: 4
 base_file: base_notebook.ipynb
 assignment_type: structured
