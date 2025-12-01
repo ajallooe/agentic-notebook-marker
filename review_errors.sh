@@ -155,12 +155,20 @@ run_summary() {
         if [[ "$SUMMARY_ONLY" == true ]]; then
             # Just count errors
             local result
-            result=$(python3 "$SCRIPT_DIR/src/utils/error_summary.py" \
-                --logs-dir "$stage_logs" \
-                --stage "$stage_name" \
-                --manifest "$MANIFEST" \
-                --final-dir "$FINAL_DIR" \
-                --quiet 2>&1) || true
+            # Only check final dir for unifier stage (marker doesn't produce final files)
+            if [[ "$stage_name" == "unifier" ]]; then
+                result=$(python3 "$SCRIPT_DIR/src/utils/error_summary.py" \
+                    --logs-dir "$stage_logs" \
+                    --stage "$stage_name" \
+                    --manifest "$MANIFEST" \
+                    --final-dir "$FINAL_DIR" \
+                    --quiet 2>&1) || true
+            else
+                result=$(python3 "$SCRIPT_DIR/src/utils/error_summary.py" \
+                    --logs-dir "$stage_logs" \
+                    --stage "$stage_name" \
+                    --quiet 2>&1) || true
+            fi
 
             if [[ -n "$result" ]]; then
                 FOUND_ERRORS=true
@@ -169,13 +177,22 @@ run_summary() {
             fi
         else
             local result
-            result=$(python3 "$SCRIPT_DIR/src/utils/error_summary.py" \
-                --logs-dir "$stage_logs" \
-                --stage "$stage_name" \
-                --manifest "$MANIFEST" \
-                --final-dir "$FINAL_DIR" \
-                $JSON_FLAG \
-                $QUIET_FLAG 2>&1) || true
+            # Only check final dir for unifier stage (marker doesn't produce final files)
+            if [[ "$stage_name" == "unifier" ]]; then
+                result=$(python3 "$SCRIPT_DIR/src/utils/error_summary.py" \
+                    --logs-dir "$stage_logs" \
+                    --stage "$stage_name" \
+                    --manifest "$MANIFEST" \
+                    --final-dir "$FINAL_DIR" \
+                    $JSON_FLAG \
+                    $QUIET_FLAG 2>&1) || true
+            else
+                result=$(python3 "$SCRIPT_DIR/src/utils/error_summary.py" \
+                    --logs-dir "$stage_logs" \
+                    --stage "$stage_name" \
+                    $JSON_FLAG \
+                    $QUIET_FLAG 2>&1) || true
+            fi
 
             if [[ -n "$result" ]]; then
                 FOUND_ERRORS=true
