@@ -277,13 +277,24 @@ else
     log_info "Base notebook: $BASE_NOTEBOOK"
 fi
 
-# Extract activity structure
-python3 "$SRC_DIR/extract_activities.py" \
-    "$BASE_NOTEBOOK" \
-    --summary
+# Extract activity structure and count activities
+EXTRACT_OUTPUT=$(python3 "$SRC_DIR/extract_activities.py" "$BASE_NOTEBOOK" --summary 2>&1)
+echo "$EXTRACT_OUTPUT"
 
-# Count activities (simplified - TODO: extract from output)
-NUM_ACTIVITIES=7  # Placeholder
+# Parse activity count from output (e.g., "Successfully extracted 3 activities")
+NUM_ACTIVITIES=$(echo "$EXTRACT_OUTPUT" | grep -oE 'extracted [0-9]+ activities' | grep -oE '[0-9]+' || echo "0")
+
+if [[ "$NUM_ACTIVITIES" == "0" ]]; then
+    # Fallback: count A* patterns in activities dir if it exists
+    if [[ -d "$ACTIVITIES_DIR" ]]; then
+        NUM_ACTIVITIES=$(find "$ACTIVITIES_DIR" -name "A*_criteria.md" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+fi
+
+if [[ "$NUM_ACTIVITIES" == "0" ]]; then
+    log_error "Could not determine number of activities"
+    exit 1
+fi
 
 log_success "Found $NUM_ACTIVITIES activities"
 
@@ -301,35 +312,25 @@ fi
 RUBRIC_FILE="$PROCESSED_DIR/rubric.md"
 ACTIVITIES_DIR="$PROCESSED_DIR/activities"
 
+# Check if pattern design already complete (rubric + all criteria files exist)
+SKIP_PATTERN_DESIGNER=false
+
 if [[ $RESUME == true && -f "$RUBRIC_FILE" && -d "$ACTIVITIES_DIR" ]]; then
     CRITERIA_COUNT=$(find "$ACTIVITIES_DIR" -name "A*_criteria.md" 2>/dev/null | wc -l | tr -d ' ')
     if [[ $CRITERIA_COUNT -ge $NUM_ACTIVITIES ]]; then
-        log_info "Stage 3: Skipping (rubric and $CRITERIA_COUNT activity criteria files already exist)"
-    else
-        log_info "Stage 3: Running Marking Pattern Designer (Interactive)..."
-        log_warning "This stage requires instructor interaction (found only $CRITERIA_COUNT/$NUM_ACTIVITIES criteria files)"
-
-        PATTERN_DESIGNER_SESSION="$SESSIONS_DIR/pattern_designer.log"
-
-        python3 "$SRC_DIR/agents/pattern_designer.py" \
-            --base-notebook "$BASE_NOTEBOOK" \
-            --overview "$OVERVIEW_FILE" \
-            --processed-dir "$PROCESSED_DIR" \
-            --session-log "$PATTERN_DESIGNER_SESSION" \
-            --provider "$DEFAULT_PROVIDER" \
-            ${MODEL_PATTERN_DESIGNER:+--model "$MODEL_PATTERN_DESIGNER"} \
-            --type structured
-
-        if [[ $? -ne 0 ]]; then
-            log_error "Pattern designer failed"
-            exit 1
-        fi
-
-        log_success "Pattern design complete"
+        SKIP_PATTERN_DESIGNER=true
+        log_info "Stage 3: Skipping (rubric and $CRITERIA_COUNT/$NUM_ACTIVITIES activity criteria files already exist)"
     fi
-else
+fi
+
+if [[ $SKIP_PATTERN_DESIGNER == false ]]; then
+    CRITERIA_COUNT=$(find "$ACTIVITIES_DIR" -name "A*_criteria.md" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
     log_info "Stage 3: Running Marking Pattern Designer (Interactive)..."
-    log_warning "This stage requires instructor interaction"
+    if [[ $CRITERIA_COUNT -gt 0 ]]; then
+        log_warning "This stage requires instructor interaction (found only $CRITERIA_COUNT/$NUM_ACTIVITIES criteria files)"
+    else
+        log_warning "This stage requires instructor interaction"
+    fi
 
     PATTERN_DESIGNER_SESSION="$SESSIONS_DIR/pattern_designer.log"
 

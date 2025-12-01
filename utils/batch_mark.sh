@@ -1,27 +1,20 @@
 #!/usr/bin/env bash
 #
-# Batch Marking Script - Mark Multiple Assignments in Stages
+# Batch Marking Script - Mark Multiple Assignments in Staged Rounds
 #
-# This script processes multiple assignments in batches, grouping interactive
-# stages together to minimize instructor waiting time.
+# This script processes multiple assignments in batched rounds, running each
+# stage for ALL assignments before moving to the next stage. This minimizes
+# instructor waiting time by grouping interactive stages together.
 #
 # Usage:
-#   batch_mark.sh ASSIGNMENTS_FILE [--stop-after STAGE] [--parallel N]
+#   batch_mark.sh ASSIGNMENTS_FILE --provider PROVIDER --model MODEL [OPTIONS]
 #
-# Workflow:
-#   Round 1: ./batch_mark.sh assignments.txt --stop-after 2
-#            (All assignments stop after pattern design)
-#            → Instructor reviews all patterns in one session
-#
-#   Round 2: ./batch_mark.sh assignments.txt --stop-after 4
-#            (All assignments stop after normalization)
-#            → Instructor reviews all dashboards in one session
-#
-#   Round 3: ./batch_mark.sh assignments.txt --stop-after 6
-#            (All assignments complete unification)
-#
-#   Round 4: ./batch_mark.sh assignments.txt
-#            (All assignments run to completion)
+# The script automatically runs 5 rounds:
+#   Round 1: Stages 1-2 (Preparation) for ALL assignments
+#   Round 2: Stage 3 (Pattern Design - INTERACTIVE) for ALL assignments
+#   Round 3: Stages 4-5 (Marking + Normalization) for ALL assignments
+#   Round 4: Stage 6 (Dashboard - INTERACTIVE) for ALL assignments
+#   Round 5: Stages 7-9 (Completion) for ALL assignments
 #
 
 set -euo pipefail
@@ -39,6 +32,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 log_info() {
@@ -57,12 +52,18 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+log_round() {
+    echo -e "${CYAN}${BOLD}$1${NC}"
+}
+
 # Usage message
 usage() {
     cat << EOF
 Usage: $(basename "$0") ASSIGNMENTS_FILE --provider PROVIDER --model MODEL [OPTIONS]
 
-Batch process multiple assignments in stages to optimize instructor workflow.
+Batch process multiple assignments in staged rounds to optimize instructor workflow.
+The script automatically runs all stages in the correct order, pausing for review
+after interactive stages.
 
 Arguments:
   ASSIGNMENTS_FILE    Text file with assignment paths (one per line)
@@ -72,35 +73,39 @@ Required:
   --model NAME        Model name (e.g., claude-sonnet-4, gemini-2.5-pro, gpt-4o)
 
 Options:
-  --stop-after N      Stop after stage N (1-9 for structured, 1-8 for freeform)
   --parallel N        Override max parallel tasks for all assignments
   --no-resume         Start fresh, ignore previous progress (default: resume)
+  --start-round N     Start from round N (1-5, default: 1)
   --help              Show this help message
 
-Recommended Workflow:
-  Round 1: Submission Discovery
-    $ $(basename "$0") assignments.txt --stop-after 1
-    → Verify all submissions were found correctly
+Automatic Workflow (5 rounds - runs continuously):
 
-  Round 2: Pattern Design
-    $ $(basename "$0") assignments.txt --stop-after 2
-    → Review all rubrics and marking criteria
+  Round 1: Preparation (stages 1-2 for ALL assignments)
+    → Finds submissions and extracts activity structure
 
-  Round 3: Normalization
-    $ $(basename "$0") assignments.txt --stop-after 4
-    → Review normalized scoring schemes
+  Round 2: Pattern Design (stage 3 - INTERACTIVE for ALL)
+    → Instructor interacts with pattern designer for each assignment
 
-  Round 4: Dashboard Review
-    $ $(basename "$0") assignments.txt --stop-after 5
-    → Review and approve all marking schemes in dashboards
+  Round 3: Marking + Normalization (stages 4-5 for ALL)
+    → Runs parallel markers and normalizers
 
-  Round 5: Completion
-    $ $(basename "$0") assignments.txt
-    → Generate final grades and optional utilities
+  Round 4: Dashboard Review (stage 6 - INTERACTIVE for ALL)
+    → Creates adjustment dashboards (instructor approves in Jupyter)
+
+  Round 5: Completion (stages 7-9 for ALL assignments)
+    → Generates final feedback, grades, and gradebook translation
+
+Stage Reference (mark_structured.sh):
+  1 = Submission discovery      5 = Normalization
+  2 = Activity extraction       6 = Dashboard creation
+  3 = Pattern design            7 = Unification
+  4 = Marker agents             8 = Aggregation
+                                9 = Gradebook translation
 
 Assignment File Format:
   assignments/lab1
   assignments/lab2
+  # This is a comment
   assignments/project-phase1
 
 Notes:
@@ -126,18 +131,14 @@ fi
 ASSIGNMENTS_FILE="$1"
 shift
 
-STOP_AFTER=""
 PARALLEL_OVERRIDE=""
 NO_RESUME=false
 PROVIDER=""
 MODEL=""
+START_ROUND=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --stop-after)
-            STOP_AFTER="$2"
-            shift 2
-            ;;
         --parallel)
             PARALLEL_OVERRIDE="$2"
             shift 2
@@ -153,6 +154,10 @@ while [[ $# -gt 0 ]]; do
         --no-resume)
             NO_RESUME=true
             shift
+            ;;
+        --start-round)
+            START_ROUND="$2"
+            shift 2
             ;;
         --help)
             usage
@@ -184,6 +189,12 @@ case "$PROVIDER" in
         ;;
 esac
 
+# Validate start round
+if [[ "$START_ROUND" -lt 1 || "$START_ROUND" -gt 5 ]]; then
+    log_error "Invalid start round: $START_ROUND (must be 1-5)"
+    exit 1
+fi
+
 # Validate assignments file
 if [[ ! -f "$ASSIGNMENTS_FILE" ]]; then
     log_error "Assignments file not found: $ASSIGNMENTS_FILE"
@@ -205,9 +216,16 @@ if [[ ${#ASSIGNMENTS[@]} -eq 0 ]]; then
     exit 1
 fi
 
+echo "=================================================================="
+echo "              BATCH MARKING - STAGED WORKFLOW"
+echo "=================================================================="
+echo
 log_info "Found ${#ASSIGNMENTS[@]} assignment(s) to process"
 log_info "Provider: $PROVIDER"
 log_info "Model: $MODEL"
+if [[ "$START_ROUND" -gt 1 ]]; then
+    log_info "Starting from round: $START_ROUND"
+fi
 echo
 
 # ============================================================================
@@ -282,247 +300,315 @@ else
     echo
 fi
 
-# Display stage information
-if [[ -n "$STOP_AFTER" ]]; then
-    STAGE_DESC=""
-    case "$STOP_AFTER" in
-        1) STAGE_DESC="Submission discovery (VERIFY)" ;;
-        2) STAGE_DESC="Pattern design (INTERACTIVE)" ;;
-        3) STAGE_DESC="Marker agents" ;;
-        4) STAGE_DESC="Normalization (REVIEW)" ;;
-        5) STAGE_DESC="Dashboard review (INTERACTIVE)" ;;
-        6) STAGE_DESC="Unification" ;;
-        7|8|9) STAGE_DESC="Near completion" ;;
-    esac
-    log_info "Will stop after stage $STOP_AFTER: $STAGE_DESC"
+# ============================================================================
+# HELPER FUNCTION: Run a stage for all assignments
+# ============================================================================
+
+run_stage_for_all() {
+    local stop_after="$1"
+    local stage_desc="$2"
+
+    local total=${#ASSIGNMENTS[@]}
+    local success_count=0
+    local failed=()
+
+    for i in "${!ASSIGNMENTS[@]}"; do
+        local assignment="${ASSIGNMENTS[$i]}"
+        local assignment_num=$((i + 1))
+
+        echo "------------------------------------------------------------------"
+        log_info "[$assignment_num/$total] Processing: $assignment"
+        echo "------------------------------------------------------------------"
+
+        # Resolve assignment path
+        local assignment_dir
+        if [[ "$assignment" = /* ]]; then
+            assignment_dir="$assignment"
+        else
+            assignment_dir="$PROJECT_ROOT/$assignment"
+        fi
+
+        if [[ ! -d "$assignment_dir" ]]; then
+            log_error "Assignment directory not found: $assignment_dir"
+            failed+=("$assignment (directory not found)")
+            continue
+        fi
+
+        local overview_file="$assignment_dir/overview.md"
+        if [[ ! -f "$overview_file" ]]; then
+            log_error "No overview.md found in $assignment_dir"
+            failed+=("$assignment (missing overview.md)")
+            continue
+        fi
+
+        # Check assignment_type in overview.md
+        local assignment_type="structured"
+        if grep -q "assignment_type:\s*freeform" "$overview_file" 2>/dev/null; then
+            assignment_type="freeform"
+        fi
+
+        # Determine which script to run
+        local mark_script
+        if [[ "$assignment_type" == "freeform" ]]; then
+            mark_script="$PROJECT_ROOT/mark_freeform.sh"
+        else
+            mark_script="$PROJECT_ROOT/mark_structured.sh"
+        fi
+
+        if [[ ! -x "$mark_script" ]]; then
+            log_error "Marking script not found or not executable: $mark_script"
+            failed+=("$assignment (missing script)")
+            continue
+        fi
+
+        # Build command
+        local cmd=("$mark_script" "$assignment_dir")
+        cmd+=("--provider" "$PROVIDER")
+        cmd+=("--model" "$MODEL")
+        cmd+=("--stop-after" "$stop_after")
+
+        if [[ -n "$PARALLEL_OVERRIDE" ]]; then
+            cmd+=("--parallel" "$PARALLEL_OVERRIDE")
+        fi
+
+        if [[ "$NO_RESUME" == true ]]; then
+            cmd+=("--no-resume")
+        fi
+
+        # Execute marking script
+        if "${cmd[@]}"; then
+            log_success "Completed: $assignment"
+            success_count=$((success_count + 1))
+        else
+            log_error "Failed: $assignment"
+            failed+=("$assignment (marking failed)")
+        fi
+
+        echo
+    done
+
+    # Report results
+    echo
+    log_info "Stage $stage_desc complete: $success_count/$total successful"
+
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        log_warning "Failed assignments:"
+        for f in "${failed[@]}"; do
+            echo "  - $f"
+        done
+    fi
+
+    return ${#failed[@]}
+}
+
+# ============================================================================
+# ROUND 1: Preparation (Stages 1-2)
+# ============================================================================
+
+if [[ "$START_ROUND" -le 1 ]]; then
+    echo
+    echo "=================================================================="
+    log_round "ROUND 1: PREPARATION (Stages 1-2 for ALL assignments)"
+    echo "=================================================================="
+    echo
+    log_info "Running submission discovery and activity extraction..."
+    echo
+
+    run_stage_for_all 2 "1-2 (Preparation)"
+
+    echo
+    echo "=================================================================="
+    log_success "ROUND 1 COMPLETE - Proceeding to Round 2"
+    echo "=================================================================="
     echo
 fi
 
-# Process each assignment
-TOTAL=${#ASSIGNMENTS[@]}
-SUCCESS_COUNT=0
-FAILED_ASSIGNMENTS=()
+# ============================================================================
+# ROUND 2: Pattern Design (Stage 3 - INTERACTIVE)
+# ============================================================================
 
-for i in "${!ASSIGNMENTS[@]}"; do
-    ASSIGNMENT="${ASSIGNMENTS[$i]}"
-    ASSIGNMENT_NUM=$((i + 1))
-
+if [[ "$START_ROUND" -le 2 ]]; then
+    echo
     echo "=================================================================="
-    log_info "Processing assignment $ASSIGNMENT_NUM/$TOTAL: $ASSIGNMENT"
+    log_round "ROUND 2: PATTERN DESIGN (Stage 3 - INTERACTIVE for ALL)"
     echo "=================================================================="
     echo
-
-    # Resolve assignment path
-    if [[ "$ASSIGNMENT" = /* ]]; then
-        # Absolute path
-        ASSIGNMENT_DIR="$ASSIGNMENT"
-    else
-        # Relative to project root
-        ASSIGNMENT_DIR="$PROJECT_ROOT/$ASSIGNMENT"
-    fi
-
-    if [[ ! -d "$ASSIGNMENT_DIR" ]]; then
-        log_error "Assignment directory not found: $ASSIGNMENT_DIR"
-        FAILED_ASSIGNMENTS+=("$ASSIGNMENT (directory not found)")
-        echo
-        continue
-    fi
-
-    # Detect assignment type by checking for base notebook and overview.md
-    OVERVIEW_FILE="$ASSIGNMENT_DIR/overview.md"
-
-    if [[ ! -f "$OVERVIEW_FILE" ]]; then
-        log_error "No overview.md found in $ASSIGNMENT_DIR"
-        FAILED_ASSIGNMENTS+=("$ASSIGNMENT (missing overview.md)")
-        echo
-        continue
-    fi
-
-    # Check assignment_type in overview.md
-    ASSIGNMENT_TYPE="structured"  # default
-    if grep -q "assignment_type:\s*freeform" "$OVERVIEW_FILE" 2>/dev/null; then
-        ASSIGNMENT_TYPE="freeform"
-    fi
-
-    log_info "Detected assignment type: $ASSIGNMENT_TYPE"
-
-    # Determine which script to run
-    if [[ "$ASSIGNMENT_TYPE" == "freeform" ]]; then
-        MARK_SCRIPT="$PROJECT_ROOT/mark_freeform.sh"
-    else
-        MARK_SCRIPT="$PROJECT_ROOT/mark_structured.sh"
-    fi
-
-    if [[ ! -x "$MARK_SCRIPT" ]]; then
-        log_error "Marking script not found or not executable: $MARK_SCRIPT"
-        FAILED_ASSIGNMENTS+=("$ASSIGNMENT (missing script)")
-        echo
-        continue
-    fi
-
-    # Build command
-    CMD=("$MARK_SCRIPT" "$ASSIGNMENT_DIR")
-
-    # Add provider and model (required)
-    CMD+=("--provider" "$PROVIDER")
-    CMD+=("--model" "$MODEL")
-
-    if [[ -n "$STOP_AFTER" ]]; then
-        CMD+=("--stop-after" "$STOP_AFTER")
-    fi
-
-    if [[ -n "$PARALLEL_OVERRIDE" ]]; then
-        CMD+=("--parallel" "$PARALLEL_OVERRIDE")
-    fi
-
-    if [[ "$NO_RESUME" == true ]]; then
-        CMD+=("--no-resume")
-    fi
-
-    log_info "Running: ${CMD[*]}"
+    log_warning "This round requires instructor interaction for each assignment."
+    log_info "The pattern designer will run for each assignment in sequence."
     echo
 
-    # Execute marking script
-    if "${CMD[@]}"; then
-        log_success "Assignment completed successfully: $ASSIGNMENT"
-        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-    else
-        log_error "Assignment failed: $ASSIGNMENT"
-        FAILED_ASSIGNMENTS+=("$ASSIGNMENT (marking failed)")
-    fi
+    run_stage_for_all 3 "3 (Pattern Design)"
 
     echo
+    echo "=================================================================="
+    log_success "ROUND 2 COMPLETE - Proceeding to Round 3"
+    echo "=================================================================="
+    echo
+fi
+
+# ============================================================================
+# ROUND 3: Marking + Normalization (Stages 4-5)
+# ============================================================================
+
+if [[ "$START_ROUND" -le 3 ]]; then
+    echo
+    echo "=================================================================="
+    log_round "ROUND 3: MARKING + NORMALIZATION (Stages 4-5 for ALL)"
+    echo "=================================================================="
+    echo
+    log_info "Running parallel marker agents and normalizers..."
+    log_info "This may take a while depending on the number of submissions."
+    echo
+
+    run_stage_for_all 5 "4-5 (Marking + Normalization)"
+
+    echo
+    echo "=================================================================="
+    log_success "ROUND 3 COMPLETE - Proceeding to Round 4"
+    echo "=================================================================="
+    echo
+fi
+
+# ============================================================================
+# ROUND 4: Dashboard Review (Stage 6 - INTERACTIVE)
+# ============================================================================
+
+if [[ "$START_ROUND" -le 4 ]]; then
+    echo
+    echo "=================================================================="
+    log_round "ROUND 4: DASHBOARD REVIEW (Stage 6 - INTERACTIVE for ALL)"
+    echo "=================================================================="
+    echo
+    log_info "Creating adjustment dashboards..."
+    echo
+
+    run_stage_for_all 6 "6 (Dashboard Creation)"
+
+    echo
+    echo "=================================================================="
+    log_success "ROUND 4 COMPLETE - Proceeding to Round 5"
+    echo "=================================================================="
+    echo
+fi
+
+# ============================================================================
+# ROUND 5: Completion (Stages 7-9)
+# ============================================================================
+
+if [[ "$START_ROUND" -le 5 ]]; then
+    echo
+    echo "=================================================================="
+    log_round "ROUND 5: COMPLETION (Stages 7-9 for ALL assignments)"
+    echo "=================================================================="
+    echo
+    log_info "Running unification, aggregation, and gradebook translation..."
+    echo
+
+    # Run to completion (no --stop-after)
+    total=${#ASSIGNMENTS[@]}
+    success_count=0
+    failed=()
+
+    for i in "${!ASSIGNMENTS[@]}"; do
+        assignment="${ASSIGNMENTS[$i]}"
+        assignment_num=$((i + 1))
+
+        echo "------------------------------------------------------------------"
+        log_info "[$assignment_num/$total] Processing: $assignment"
+        echo "------------------------------------------------------------------"
+
+        # Resolve assignment path
+        if [[ "$assignment" = /* ]]; then
+            assignment_dir="$assignment"
+        else
+            assignment_dir="$PROJECT_ROOT/$assignment"
+        fi
+
+        if [[ ! -d "$assignment_dir" ]]; then
+            log_error "Assignment directory not found: $assignment_dir"
+            failed+=("$assignment (directory not found)")
+            continue
+        fi
+
+        overview_file="$assignment_dir/overview.md"
+        if [[ ! -f "$overview_file" ]]; then
+            log_error "No overview.md found in $assignment_dir"
+            failed+=("$assignment (missing overview.md)")
+            continue
+        fi
+
+        # Check assignment_type
+        assignment_type="structured"
+        if grep -q "assignment_type:\s*freeform" "$overview_file" 2>/dev/null; then
+            assignment_type="freeform"
+        fi
+
+        # Determine script
+        if [[ "$assignment_type" == "freeform" ]]; then
+            mark_script="$PROJECT_ROOT/mark_freeform.sh"
+        else
+            mark_script="$PROJECT_ROOT/mark_structured.sh"
+        fi
+
+        if [[ ! -x "$mark_script" ]]; then
+            log_error "Marking script not found: $mark_script"
+            failed+=("$assignment (missing script)")
+            continue
+        fi
+
+        # Build command (NO --stop-after for completion)
+        cmd=("$mark_script" "$assignment_dir")
+        cmd+=("--provider" "$PROVIDER")
+        cmd+=("--model" "$MODEL")
+
+        if [[ -n "$PARALLEL_OVERRIDE" ]]; then
+            cmd+=("--parallel" "$PARALLEL_OVERRIDE")
+        fi
+
+        # Always resume in round 5
+        # (don't pass --no-resume even if it was set initially)
+
+        if "${cmd[@]}"; then
+            log_success "Completed: $assignment"
+            success_count=$((success_count + 1))
+        else
+            log_error "Failed: $assignment"
+            failed+=("$assignment (completion failed)")
+        fi
+
+        echo
+    done
+fi
+
+# ============================================================================
+# FINAL SUMMARY
+# ============================================================================
+
+echo
+echo "=================================================================="
+echo "              BATCH MARKING COMPLETE"
+echo "=================================================================="
+echo
+log_info "All ${#ASSIGNMENTS[@]} assignments have been processed."
+echo
+echo "Final outputs for each assignment:"
+echo
+for assignment in "${ASSIGNMENTS[@]}"; do
+    if [[ "$assignment" = /* ]]; then
+        ASSIGNMENT_DIR="$assignment"
+    else
+        ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
+    fi
+    echo "  📁 $assignment"
+    echo "     • Grades: $ASSIGNMENT_DIR/processed/final/grades.csv"
+    echo "     • Feedback: $ASSIGNMENT_DIR/processed/final/*_feedback.md"
+    if [[ -d "$ASSIGNMENT_DIR/processed/translation" ]]; then
+        echo "     • Gradebooks: $ASSIGNMENT_DIR/processed/translation/"
+    fi
     echo
 done
 
-# Summary
-echo "=================================================================="
-echo "                    BATCH MARKING SUMMARY"
-echo "=================================================================="
+log_success "Batch marking workflow complete!"
 echo
-log_info "Total assignments: $TOTAL"
-log_success "Successful: $SUCCESS_COUNT"
-
-if [[ ${#FAILED_ASSIGNMENTS[@]} -gt 0 ]]; then
-    log_error "Failed: ${#FAILED_ASSIGNMENTS[@]}"
-    echo
-    echo "Failed assignments:"
-    for failed in "${FAILED_ASSIGNMENTS[@]}"; do
-        echo "  - $failed"
-    done
-    echo
-    exit 1
-else
-    log_success "All assignments processed successfully!"
-fi
-
-# Next steps guidance
-if [[ -n "$STOP_AFTER" ]]; then
-    echo
-    echo "=================================================================="
-    echo "                       NEXT STEPS"
-    echo "=================================================================="
-    echo
-    case "$STOP_AFTER" in
-        1)
-            log_info "✓ Stage 1 (Submission Discovery) complete for all assignments"
-            echo
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "VERIFY: Submissions found correctly"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo
-            echo "Check submission manifests for each assignment:"
-            for assignment in "${ASSIGNMENTS[@]}"; do
-                if [[ "$assignment" = /* ]]; then
-                    ASSIGNMENT_DIR="$assignment"
-                else
-                    ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
-                fi
-                echo
-                echo "📁 $assignment"
-                echo "  • Manifest: $ASSIGNMENT_DIR/processed/submissions_manifest.json"
-                echo "    Verify all expected students/groups were found"
-            done
-            echo
-            log_info "When submissions look correct, continue with Round 2:"
-            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 2"
-            ;;
-        2)
-            log_info "✓ Stage 2 (Pattern Design) complete for all assignments"
-            echo
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "REVIEW REQUIRED: Marking criteria and rubrics"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo
-            echo "Please review the following files for each assignment:"
-            for assignment in "${ASSIGNMENTS[@]}"; do
-                if [[ "$assignment" = /* ]]; then
-                    ASSIGNMENT_DIR="$assignment"
-                else
-                    ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
-                fi
-                echo
-                echo "📁 $assignment"
-                echo "  • Rubric: $ASSIGNMENT_DIR/processed/rubric.md"
-                if [[ -f "$ASSIGNMENT_DIR/processed/marking_criteria.md" ]]; then
-                    echo "  • Criteria: $ASSIGNMENT_DIR/processed/marking_criteria.md"
-                elif [[ -d "$ASSIGNMENT_DIR/processed/activities" ]]; then
-                    echo "  • Criteria: $ASSIGNMENT_DIR/processed/activities/A*_criteria.md"
-                fi
-            done
-            echo
-            log_info "When criteria look good, continue with Round 3:"
-            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 4"
-            ;;
-        4)
-            log_info "✓ Stage 4 (Normalization) complete for all assignments"
-            echo
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "REVIEW REQUIRED: Normalized scoring schemes"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo
-            echo "Review normalized scoring for each assignment:"
-            for assignment in "${ASSIGNMENTS[@]}"; do
-                if [[ "$assignment" = /* ]]; then
-                    ASSIGNMENT_DIR="$assignment"
-                else
-                    ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
-                fi
-                echo
-                echo "📁 $assignment"
-                if [[ -d "$ASSIGNMENT_DIR/processed/normalized" ]]; then
-                    echo "  • Scoring: $ASSIGNMENT_DIR/processed/normalized/"
-                    echo "    Review scoring schemes before dashboard adjustment"
-                fi
-            done
-            echo
-            log_info "When scoring schemes look reasonable, continue with Round 4:"
-            echo "  $(basename "$0") $ASSIGNMENTS_FILE --stop-after 5"
-            ;;
-        5)
-            log_info "✓ Stage 5 (Dashboard Review) complete for all assignments"
-            echo
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "REVIEW REQUIRED: Adjustment dashboards and approve schemes"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo
-            echo "Open and approve marking schemes in Jupyter:"
-            for assignment in "${ASSIGNMENTS[@]}"; do
-                if [[ "$assignment" = /* ]]; then
-                    ASSIGNMENT_DIR="$assignment"
-                else
-                    ASSIGNMENT_DIR="$PROJECT_ROOT/$assignment"
-                fi
-                echo
-                echo "📁 $assignment"
-                echo "  jupyter notebook \"$ASSIGNMENT_DIR/processed/adjustment_dashboard.ipynb\""
-            done
-            echo
-            log_info "After approving all schemes, complete with Round 5:"
-            echo "  $(basename "$0") $ASSIGNMENTS_FILE"
-            ;;
-    esac
-    echo
-fi
 
 exit 0

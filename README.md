@@ -515,23 +515,23 @@ You can automatically generate an `overview.md` file from an existing Jupyter no
 
 ```bash
 # Using the shell wrapper (recommended)
-./create_overview.sh <notebook_path> --model <model_name>
+./utils/create_overview.sh <notebook_path> --provider <provider> --model <model_name>
 
 # Or call Python directly
-python3 src/create_overview.py <notebook_path> --model <model_name>
+python3 src/create_overview.py <notebook_path> --provider <provider> --model <model_name>
 ```
 
 **Examples**:
 
 ```bash
-# Using Claude Sonnet
-./create_overview.sh assignments/lab1/notebook.ipynb --model claude-sonnet-4-5
+# Using Claude
+./utils/create_overview.sh assignments/lab1/notebook.ipynb --provider claude --model claude-sonnet-4-5
 
 # Using Gemini
-./create_overview.sh assignments/lab2/notebook.ipynb --model gemini-2.5-pro
+./utils/create_overview.sh assignments/lab2/notebook.ipynb --provider gemini --model gemini-2.5-pro
 
 # Using Codex
-./create_overview.sh assignments/lab3/notebook.ipynb --model gpt-5.1
+./utils/create_overview.sh assignments/lab3/notebook.ipynb --provider codex --model gpt-5.1
 ```
 
 **What it does**:
@@ -833,7 +833,7 @@ Creates `overview.md` template for new assignments:
 
 ### Batch Marking (`utils/batch_mark.sh`)
 
-Process multiple assignments in stages to optimize instructor workflow. This groups all interactive steps together across assignments to minimize waiting time.
+Process multiple assignments in staged rounds to optimize instructor workflow. The script automatically runs all stages in 5 rounds, pausing for review after interactive stages.
 
 **Setup:**
 
@@ -843,61 +843,73 @@ Create a text file listing assignment directories (one per line):
 # my_assignments.txt
 assignments/lab1
 assignments/lab2
+# Comments are ignored
 assignments/project-phase1
 ```
 
-**Recommended Workflow:**
+**Usage:**
 
 ```bash
-# Round 1: Submission Discovery - Verify submissions found
-./utils/batch_mark.sh my_assignments.txt --stop-after 1
-# → Verify ALL student/group submissions were found correctly
-# → Check submissions_manifest.json for each assignment
-
-# Round 2: Pattern Design - Review marking criteria
-./utils/batch_mark.sh my_assignments.txt --stop-after 2
-# → Instructor reviews ALL rubrics and marking criteria
-# → Verify criteria are appropriate before any marking begins
-
-# Round 3: Normalization - Review scoring schemes
-./utils/batch_mark.sh my_assignments.txt --stop-after 4
-# → Review normalized scoring schemes from marker aggregation
-# → Verify mistake/positive point categorization looks reasonable
-
-# Round 4: Dashboard Review - Approve final marking
-./utils/batch_mark.sh my_assignments.txt --stop-after 5
-# → Instructor reviews ALL adjustment dashboards
-# → Approve final marking schemes with distribution preview
-
-# Round 5: Completion - Generate final grades
-./utils/batch_mark.sh my_assignments.txt
-# → Unification, aggregation, artifact cleaning, gradebook translation
-# → grades.csv ready for upload to LMS
+# Run the complete workflow
+./utils/batch_mark.sh my_assignments.txt --provider gemini --model gemini-2.5-pro
 ```
+
+**Automatic Workflow (5 rounds - runs continuously):**
+
+The script executes all rounds automatically without pauses:
+
+1. **Round 1: Preparation** (Stages 1-2 for ALL assignments)
+   - Finds submissions and extracts activity structure
+
+2. **Round 2: Pattern Design** (Stage 3 - INTERACTIVE for ALL)
+   - Instructor interacts with pattern designer for each assignment in sequence
+
+3. **Round 3: Marking + Normalization** (Stages 4-5 for ALL)
+   - Runs parallel markers and normalizers
+
+4. **Round 4: Dashboard Review** (Stage 6 - INTERACTIVE for ALL)
+   - Creates adjustment dashboards (instructor approves in Jupyter during stage)
+
+5. **Round 5: Completion** (Stages 7-9 for ALL)
+   - Generates final feedback, grades, and gradebook translation
 
 **Benefits:**
 
-- **Quality checkpoints**: Verify submissions (Stage 1), criteria (Stage 2), scoring (Stage 4), schemes (Stage 5)
-- **Minimizes context switching**: Review similar tasks across all assignments at once
-- **Reduces idle time**: No waiting between stages for individual assignments
-- **Consistency**: Spot patterns and ensure uniform standards across assignments
-- **Automatic resume**: Uses `--resume` by default to skip completed work
+- **Batched interaction**: All interactive steps for all assignments grouped together
+- **Continuous execution**: No manual pauses between rounds
+- **Resume support**: Use `--start-round N` to resume from a specific round
 - **Auto-detection**: Automatically detects structured vs freeform assignments
+- **Overview generation**: Prompts to generate missing overview.md files
 
 **Options:**
 
 ```bash
+# Required: specify provider and model
+./utils/batch_mark.sh assignments.txt --provider claude --model claude-sonnet-4
+
+# Resume from a specific round (1-5)
+./utils/batch_mark.sh assignments.txt --provider gemini --model gemini-2.5-pro --start-round 3
+
 # Override parallel tasks for all assignments
-./utils/batch_mark.sh assignments.txt --parallel 8
+./utils/batch_mark.sh assignments.txt --provider gemini --model gemini-2.5-pro --parallel 8
 
-# Start fresh (ignore previous progress)
-./utils/batch_mark.sh assignments.txt --no-resume
-
-# Custom stopping point
-./utils/batch_mark.sh assignments.txt --stop-after 3
+# Start fresh (ignore previous progress within each assignment)
+./utils/batch_mark.sh assignments.txt --provider gemini --model gemini-2.5-pro --no-resume
 ```
 
-See `assignments/assignments.txt.example` for file format.
+**Stage Reference:**
+
+| Stage | Description | Type |
+|-------|-------------|------|
+| 1 | Submission discovery | Automatic |
+| 2 | Activity extraction | Automatic |
+| 3 | Pattern design | INTERACTIVE |
+| 4 | Marker agents | Automatic |
+| 5 | Normalization | Automatic |
+| 6 | Dashboard creation | INTERACTIVE |
+| 7 | Unification | Automatic |
+| 8 | Aggregation | Automatic |
+| 9 | Gradebook translation | Automatic |
 
 ## Troubleshooting
 
