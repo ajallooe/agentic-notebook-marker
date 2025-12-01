@@ -74,8 +74,7 @@ Required:
 Options:
   --stop-after N      Stop after stage N (1-9 for structured, 1-8 for freeform)
   --parallel N        Override max parallel tasks for all assignments
-  --resume            Resume from last checkpoint (default: true)
-  --no-resume         Start fresh, ignore previous progress
+  --no-resume         Start fresh, ignore previous progress (default: resume)
   --help              Show this help message
 
 Recommended Workflow:
@@ -129,7 +128,7 @@ shift
 
 STOP_AFTER=""
 PARALLEL_OVERRIDE=""
-RESUME_FLAG="--resume"
+NO_RESUME=false
 PROVIDER=""
 MODEL=""
 
@@ -151,12 +150,8 @@ while [[ $# -gt 0 ]]; do
             MODEL="$2"
             shift 2
             ;;
-        --resume)
-            RESUME_FLAG="--resume"
-            shift
-            ;;
         --no-resume)
-            RESUME_FLAG=""
+            NO_RESUME=true
             shift
             ;;
         --help)
@@ -380,8 +375,8 @@ for i in "${!ASSIGNMENTS[@]}"; do
         CMD+=("--parallel" "$PARALLEL_OVERRIDE")
     fi
 
-    if [[ -n "$RESUME_FLAG" ]]; then
-        CMD+=("$RESUME_FLAG")
+    if [[ "$NO_RESUME" == true ]]; then
+        CMD+=("--no-resume")
     fi
 
     log_info "Running: ${CMD[*]}"
