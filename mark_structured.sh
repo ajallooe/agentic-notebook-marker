@@ -47,6 +47,7 @@ STOP_AFTER_STAGE=""
 PARALLEL_OVERRIDE=""
 PROVIDER_OVERRIDE=""
 MODEL_OVERRIDE=""
+AUTO_APPROVE=false  # Auto-approve LLM proposals without instructor interaction
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -88,6 +89,10 @@ while [[ $# -gt 0 ]]; do
             MODEL_OVERRIDE="$2"
             shift 2
             ;;
+        --auto-approve)
+            AUTO_APPROVE=true
+            shift
+            ;;
         -*)
             echo "Unknown option: $1" >&2
             echo "Usage: $0 <assignment_directory> [OPTIONS]" >&2
@@ -116,6 +121,7 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "  --no-clean-artifacts    Disable artifact cleaning of grades.csv"
     echo "  --stop-after N          Stop after completing stage N"
     echo "  --parallel N            Override max_parallel setting"
+    echo "  --auto-approve          Auto-approve LLM proposals (no instructor interaction)"
     exit 1
 fi
 
@@ -338,23 +344,37 @@ fi
 
 if [[ $SKIP_PATTERN_DESIGNER == false ]]; then
     CRITERIA_COUNT=$(find "$ACTIVITIES_DIR" -name "A*_criteria.md" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
-    log_info "Stage 3: Running Marking Pattern Designer (Interactive)..."
-    if [[ $CRITERIA_COUNT -gt 0 ]]; then
-        log_warning "This stage requires instructor interaction (found only $CRITERIA_COUNT/$NUM_ACTIVITIES criteria files)"
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        log_info "Stage 3: Running Marking Pattern Designer (Auto-Approve Mode)..."
     else
-        log_warning "This stage requires instructor interaction"
+        log_info "Stage 3: Running Marking Pattern Designer (Interactive)..."
+        if [[ $CRITERIA_COUNT -gt 0 ]]; then
+            log_warning "This stage requires instructor interaction (found only $CRITERIA_COUNT/$NUM_ACTIVITIES criteria files)"
+        else
+            log_warning "This stage requires instructor interaction"
+        fi
     fi
 
     PATTERN_DESIGNER_SESSION="$SESSIONS_DIR/pattern_designer.log"
 
-    python3 "$SRC_DIR/agents/pattern_designer.py" \
-        --base-notebook "$BASE_NOTEBOOK" \
-        --overview "$OVERVIEW_FILE" \
-        --processed-dir "$PROCESSED_DIR" \
-        --session-log "$PATTERN_DESIGNER_SESSION" \
-        --provider "$DEFAULT_PROVIDER" \
-        ${MODEL_PATTERN_DESIGNER:+--model "$MODEL_PATTERN_DESIGNER"} \
-        --type structured
+    # Build command with optional --auto-approve flag
+    PATTERN_CMD=(python3 "$SRC_DIR/agents/pattern_designer.py"
+        --base-notebook "$BASE_NOTEBOOK"
+        --overview "$OVERVIEW_FILE"
+        --processed-dir "$PROCESSED_DIR"
+        --session-log "$PATTERN_DESIGNER_SESSION"
+        --provider "$DEFAULT_PROVIDER"
+        --type structured)
+
+    if [[ -n "$MODEL_PATTERN_DESIGNER" ]]; then
+        PATTERN_CMD+=(--model "$MODEL_PATTERN_DESIGNER")
+    fi
+
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        PATTERN_CMD+=(--auto-approve)
+    fi
+
+    "${PATTERN_CMD[@]}"
 
     if [[ $? -ne 0 ]]; then
         log_error "Pattern designer failed"
@@ -515,17 +535,28 @@ if [[ $RESUME == true && -f "$APPROVED_SCHEME" ]]; then
 else
     log_info "Stage 6: Creating adjustment dashboard..."
 
-    python3 "$SRC_DIR/create_dashboard.py" \
-        "$NORMALIZED_DIR/combined_scoring.json" \
-        "$NORMALIZED_DIR/student_mappings.json" \
-        --output "$DASHBOARD_NOTEBOOK" \
-        --type structured
+    # Build dashboard command with optional --auto-approve flag
+    DASHBOARD_CMD=(python3 "$SRC_DIR/create_dashboard.py"
+        "$NORMALIZED_DIR/combined_scoring.json"
+        "$NORMALIZED_DIR/student_mappings.json"
+        --output "$DASHBOARD_NOTEBOOK"
+        --type structured)
 
-    log_success "Dashboard created: $DASHBOARD_NOTEBOOK"
-    log_warning "Please open the dashboard in Jupyter and approve the marking scheme:"
-    log_info "  jupyter notebook \"$DASHBOARD_NOTEBOOK\""
-    log_info ""
-    read -p "Press Enter when you have saved the approved scheme..."
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        DASHBOARD_CMD+=(--auto-approve)
+    fi
+
+    "${DASHBOARD_CMD[@]}"
+
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        log_success "Dashboard created and scheme auto-approved"
+    else
+        log_success "Dashboard created: $DASHBOARD_NOTEBOOK"
+        log_warning "Please open the dashboard in Jupyter and approve the marking scheme:"
+        log_info "  jupyter notebook \"$DASHBOARD_NOTEBOOK\""
+        log_info ""
+        read -p "Press Enter when you have saved the approved scheme..."
+    fi
 
     # Verify approved scheme exists
     if [[ ! -f "$APPROVED_SCHEME" ]]; then

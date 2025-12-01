@@ -45,6 +45,9 @@ RESUME=true  # Always resume by default
 CLEAN_ARTIFACTS=true  # Clean artifacts by default
 STOP_AFTER_STAGE=""
 PARALLEL_OVERRIDE=""
+AUTO_APPROVE=false
+PROVIDER_OVERRIDE=""
+MODEL_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -74,6 +77,18 @@ while [[ $# -gt 0 ]]; do
             PARALLEL_OVERRIDE="$2"
             shift 2
             ;;
+        --auto-approve)
+            AUTO_APPROVE=true
+            shift
+            ;;
+        --provider)
+            PROVIDER_OVERRIDE="$2"
+            shift 2
+            ;;
+        --model)
+            MODEL_OVERRIDE="$2"
+            shift 2
+            ;;
         -*)
             echo "Unknown option: $1" >&2
             echo "Usage: $0 <assignment_directory> [OPTIONS]" >&2
@@ -99,6 +114,9 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "  --no-clean-artifacts  Skip cleaning LLM artifacts from output files"
     echo "  --stop-after N        Stop after completing stage N (1-8)"
     echo "  --parallel N          Override max parallel tasks (default from config)"
+    echo "  --auto-approve        Skip interactive stages (pattern design, dashboard approval)"
+    echo "  --provider NAME       Override LLM provider (claude, gemini, or codex)"
+    echo "  --model NAME          Override model name"
     exit 1
 fi
 
@@ -124,9 +142,27 @@ fi
 # Parse configuration from overview.md
 eval "$("$SRC_DIR/utils/config_parser.py" "$OVERVIEW_FILE" --bash)"
 
+# Apply command-line overrides
+if [[ -n "$PROVIDER_OVERRIDE" ]]; then
+    DEFAULT_PROVIDER="$PROVIDER_OVERRIDE"
+fi
+
+if [[ -n "$MODEL_OVERRIDE" ]]; then
+    DEFAULT_MODEL="$MODEL_OVERRIDE"
+    # Clear stage-specific models when --model is passed
+    unset STAGE_MODEL_PATTERN_DESIGNER
+    unset STAGE_MODEL_MARKER
+    unset STAGE_MODEL_NORMALIZER
+    unset STAGE_MODEL_UNIFIER
+    unset STAGE_MODEL_AGGREGATOR
+fi
+
 log_info "Configuration:"
 log_info "  Provider: $DEFAULT_PROVIDER"
 log_info "  Default model: ${DEFAULT_MODEL:-default}"
+if [[ "$AUTO_APPROVE" == true ]]; then
+    log_info "  Auto-approve: ENABLED (skipping interactive stages)"
+fi
 
 # Apply --parallel override if provided
 if [[ -n "$PARALLEL_OVERRIDE" ]]; then
@@ -265,8 +301,12 @@ if [[ $RESUME == true && -f "$PROCESSED_DIR/rubric.md" && -f "$PROCESSED_DIR/mar
     log_info "Stage 2: Skipping (rubric and marking criteria already exist)"
     log_success "Pattern design complete"
 else
-    log_info "Stage 2: Running Marking Pattern Designer (Interactive)..."
-    log_warning "This stage requires instructor interaction"
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        log_info "Stage 2: Running Marking Pattern Designer (Auto-approve mode)..."
+    else
+        log_info "Stage 2: Running Marking Pattern Designer (Interactive)..."
+        log_warning "This stage requires instructor interaction"
+    fi
 
     PATTERN_DESIGNER_SESSION="$SESSIONS_DIR/pattern_designer.log"
 
@@ -277,7 +317,8 @@ else
         --provider "$DEFAULT_PROVIDER" \
         ${MODEL_PATTERN_DESIGNER:+--model "$MODEL_PATTERN_DESIGNER"} \
         --type freeform \
-        $([[ "$DIFFERENT_PROBLEMS" == "true" ]] && echo "--different-problems")
+        $([[ "$DIFFERENT_PROBLEMS" == "true" ]] && echo "--different-problems") \
+        $([[ "$AUTO_APPROVE" == "true" ]] && echo "--auto-approve")
 
     if [[ $? -ne 0 ]]; then
         log_error "Pattern designer failed"
@@ -417,19 +458,29 @@ if [[ $RESUME == true && -f "$APPROVED_SCHEME" ]]; then
     log_info "Stage 5: Skipping (approved scheme already exists)"
     log_success "Approved scheme loaded: $APPROVED_SCHEME"
 else
-    log_info "Stage 5: Creating adjustment dashboard..."
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        log_info "Stage 5: Creating adjustment dashboard (Auto-approve mode)..."
+    else
+        log_info "Stage 5: Creating adjustment dashboard..."
+    fi
 
     python3 "$SRC_DIR/create_dashboard.py" \
         "$NORMALIZED_DIR/combined_scoring.json" \
         "$NORMALIZED_DIR/student_mappings.json" \
         --output "$DASHBOARD_NOTEBOOK" \
-        --type freeform
+        --type freeform \
+        $([[ "$AUTO_APPROVE" == "true" ]] && echo "--auto-approve")
 
     log_success "Dashboard created: $DASHBOARD_NOTEBOOK"
-    log_warning "Please open the dashboard in Jupyter and approve the marking scheme:"
-    log_info "  jupyter notebook \"$DASHBOARD_NOTEBOOK\""
-    log_info ""
-    read -p "Press Enter when you have saved the approved scheme..."
+
+    if [[ "$AUTO_APPROVE" == true ]]; then
+        log_info "Auto-approved marking scheme saved to: $APPROVED_SCHEME"
+    else
+        log_warning "Please open the dashboard in Jupyter and approve the marking scheme:"
+        log_info "  jupyter notebook \"$DASHBOARD_NOTEBOOK\""
+        log_info ""
+        read -p "Press Enter when you have saved the approved scheme..."
+    fi
 
     # Verify approved scheme exists
     if [[ ! -f "$APPROVED_SCHEME" ]]; then
@@ -642,10 +693,14 @@ if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null;
                 echo ""
             fi
 
-            log_warning "Review the mapping before applying:"
-            log_info "  Mapping file: $TRANSLATION_MAPPING"
-            log_info ""
-            read -p "Press Enter to apply translation, or Ctrl+C to skip..."
+            if [[ "$AUTO_APPROVE" == true ]]; then
+                log_info "Auto-approve mode: applying translation automatically..."
+            else
+                log_warning "Review the mapping before applying:"
+                log_info "  Mapping file: $TRANSLATION_MAPPING"
+                log_info ""
+                read -p "Press Enter to apply translation, or Ctrl+C to skip..."
+            fi
 
             # Apply translation
             log_info "Applying translation to gradebooks..."

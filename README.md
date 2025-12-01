@@ -55,6 +55,9 @@ cp ~/Downloads/*.csv assignments/your-assignment-name/gradebooks/
 - `--no-resume`: Start from scratch, ignoring previous progress
 - `--clean`: Remove processed directory and start completely fresh
 - `--force-xargs`: Force use of xargs instead of GNU parallel (for testing)
+- `--auto-approve`: Skip interactive stages (pattern design approval, dashboard approval)
+- `--provider NAME`: Override LLM provider (claude, gemini, or codex)
+- `--model NAME`: Override model name (e.g., gpt-5.1, claude-sonnet-4)
 
 ### Resume Options
 
@@ -95,6 +98,41 @@ The marking scripts automatically resume from where they left off by default. If
 ./mark_structured.sh assignments/lab1
 # Output: "Generated 28 marker tasks (skipped 196 already completed)"
 ```
+
+### Auto-Approve Mode
+
+For fully automated workflows without manual intervention, use the `--auto-approve` flag:
+
+```bash
+# Run completely automated (no interactive stages)
+./mark_structured.sh assignments/your-assignment-name --auto-approve
+
+# Combine with batch marking for fully automated processing
+./utils/batch_mark.sh assignments.txt --provider codex --model gpt-5.1 --auto-approve
+```
+
+**What changes with `--auto-approve`**:
+
+- **Pattern Designer** (Stage 3): Runs in headless mode, creates rubric and criteria without waiting for approval
+- **Dashboard** (Stage 6): Automatically approves the marking scheme without opening Jupyter
+- **Gradebook Translation** (Stage 9): Automatically applies translation without confirmation prompt
+
+**When to use**:
+
+- Batch processing multiple assignments where you trust the LLM's judgment
+- CI/CD pipelines or automated grading systems
+- Re-running assignments where you've already reviewed the criteria
+- Testing and development
+
+**Caution**: With `--auto-approve`, the LLM makes all marking decisions without instructor review. The system will:
+- Create rubrics based on its own analysis
+- Set all mark deductions based on its assessment
+- Generate final grades without human oversight
+
+It's recommended to:
+- Review output files after completion
+- Use `--auto-approve` only for assignments you're familiar with
+- Consider running without `--auto-approve` the first time to establish expectations
 
 ## What This System Does
 
@@ -895,6 +933,9 @@ The script executes all rounds automatically without pauses:
 
 # Start fresh (ignore previous progress within each assignment)
 ./utils/batch_mark.sh assignments.txt --provider gemini --model gemini-2.5-pro --no-resume
+
+# Fully automated mode (skip all interactive stages)
+./utils/batch_mark.sh assignments.txt --provider codex --model gpt-5.1 --auto-approve
 ```
 
 **Stage Reference:**

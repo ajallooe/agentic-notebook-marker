@@ -74,6 +74,11 @@ def main():
         action="store_true",
         help="Groups solve different problems (abstract criteria needed)"
     )
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="Auto-approve proposals without instructor interaction (headless mode)"
+    )
 
     args = parser.parse_args()
 
@@ -135,13 +140,37 @@ The marker agents will receive each group's specific problem description along w
             different_problems_note=different_problems_note
         )
 
+        # If auto-approve mode, modify prompt to not ask for approval
+        if args.auto_approve:
+            auto_approve_note = """
+
+## AUTO-APPROVE MODE
+
+**IMPORTANT**: This is running in AUTO-APPROVE mode. Do NOT wait for instructor approval.
+- Create the rubric based on your best judgment
+- Proceed immediately to create all activity criteria files
+- Do NOT ask clarifying questions - make reasonable assumptions
+- Complete ALL tasks and create ALL files without stopping
+"""
+            # Insert after the CRITICAL CONSTRAINTS section
+            prompt = prompt.replace(
+                "## Assignment Context",
+                auto_approve_note + "\n## Assignment Context"
+            )
+
         # Save prompt for debugging
         prompt_debug_file = Path(args.session_log).with_suffix('.prompt.txt')
         with open(prompt_debug_file, 'w') as f:
             f.write(prompt)
 
+        # Determine mode based on auto-approve flag
+        mode = "headless" if args.auto_approve else "interactive"
+
         print("="*70)
-        print("PATTERN DESIGNER - INTERACTIVE SESSION")
+        if args.auto_approve:
+            print("PATTERN DESIGNER - AUTO-APPROVE MODE (Headless)")
+        else:
+            print("PATTERN DESIGNER - INTERACTIVE SESSION")
         print("="*70)
         print(f"Assignment type: {args.type}")
         print(f"Output directory: {args.processed_dir}")
@@ -152,18 +181,21 @@ The marker agents will receive each group's specific problem description along w
         print("2. Create or validate the rubric")
         print("3. Create detailed marking criteria")
         print()
-        print("Please interact with the agent to complete the design process.")
-        print("The agent will tell you when it's complete.")
+        if not args.auto_approve:
+            print("Please interact with the agent to complete the design process.")
+            print("The agent will tell you when it's complete.")
+        else:
+            print("Running in auto-approve mode - no interaction required.")
         print("="*70)
         print()
 
-        # Call LLM via unified caller in INTERACTIVE mode
+        # Call LLM via unified caller
         llm_caller = Path(__file__).parent.parent / "llm_caller.sh"
 
         cmd = [
             str(llm_caller),
             "--prompt", prompt,
-            "--mode", "interactive",
+            "--mode", mode,
             "--provider", args.provider,
             "--output", args.session_log
         ]
@@ -171,8 +203,12 @@ The marker agents will receive each group's specific problem description along w
         if args.model:
             cmd.extend(["--model", args.model])
 
-        # Inherit stdin/stdout/stderr to preserve TTY access for interactive CLI
-        result = subprocess.run(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+        # For interactive mode, inherit stdin/stdout/stderr to preserve TTY
+        # For headless mode, just capture output
+        if args.auto_approve:
+            result = subprocess.run(cmd, capture_output=False)
+        else:
+            result = subprocess.run(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
 
         if result.returncode != 0:
             print(f"\n✗ Pattern design session ended with errors", file=sys.stderr)

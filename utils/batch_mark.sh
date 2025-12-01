@@ -86,6 +86,7 @@ Options:
   --parallel N        Override max parallel tasks for all assignments
   --no-resume         Start fresh, ignore previous progress (default: resume)
   --start-round N     Start from round N (1-5, default: 1)
+  --auto-approve      Skip interactive stages (pattern design, dashboard approval)
   --help              Show this help message
 
 Automatic Workflow (5 rounds - runs continuously):
@@ -146,6 +147,7 @@ NO_RESUME=false
 PROVIDER=""
 MODEL=""
 START_ROUND=1
+AUTO_APPROVE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -168,6 +170,10 @@ while [[ $# -gt 0 ]]; do
         --start-round)
             START_ROUND="$2"
             shift 2
+            ;;
+        --auto-approve)
+            AUTO_APPROVE=true
+            shift
             ;;
         --help)
             usage
@@ -235,6 +241,9 @@ log_info "Provider: $PROVIDER"
 log_info "Model: $MODEL"
 if [[ "$START_ROUND" -gt 1 ]]; then
     log_info "Starting from round: $START_ROUND"
+fi
+if [[ "$AUTO_APPROVE" == true ]]; then
+    log_info "Auto-approve mode: ENABLED (skipping interactive stages)"
 fi
 echo
 
@@ -383,6 +392,10 @@ run_stage_for_all() {
 
         if [[ "$NO_RESUME" == true ]]; then
             cmd+=("--no-resume")
+        fi
+
+        if [[ "$AUTO_APPROVE" == true ]]; then
+            cmd+=("--auto-approve")
         fi
 
         # Execute marking script
@@ -576,6 +589,10 @@ if [[ "$START_ROUND" -le 5 ]]; then
 
         if [[ -n "$PARALLEL_OVERRIDE" ]]; then
             cmd+=("--parallel" "$PARALLEL_OVERRIDE")
+        fi
+
+        if [[ "$AUTO_APPROVE" == true ]]; then
+            cmd+=("--auto-approve")
         fi
 
         # Always resume in round 5

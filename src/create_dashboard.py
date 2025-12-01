@@ -513,6 +513,11 @@ def main():
         default="structured",
         help="Assignment type"
     )
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="Auto-approve the scheme without instructor interaction"
+    )
 
     args = parser.parse_args()
 
@@ -524,8 +529,34 @@ def main():
     )
 
     print(f"✓ Dashboard created: {notebook_path}")
-    print(f"\nTo use:")
-    print(f"  jupyter notebook \"{notebook_path}\"")
+
+    if args.auto_approve:
+        # Auto-approve: create approved_scheme.json using the default values
+        print("Auto-approving marking scheme...")
+        output_dir = Path(args.output).parent
+        approved_scheme_path = output_dir / "approved_scheme.json"
+
+        # Load the normalized data to extract the scheme
+        with open(args.normalized_data, 'r') as f:
+            normalized_data = json.load(f)
+
+        # Create approved scheme with default values (LLM-suggested deductions)
+        approved_scheme = {
+            "approved": True,
+            "auto_approved": True,
+            "activity_marks": normalized_data.get("activity_marks", {}),
+            "mistakes": normalized_data.get("mistakes", {}),
+            "positives": normalized_data.get("positives", {}),
+            "total_marks": normalized_data.get("total_marks", 100)
+        }
+
+        with open(approved_scheme_path, 'w') as f:
+            json.dump(approved_scheme, f, indent=2)
+
+        print(f"✓ Scheme auto-approved: {approved_scheme_path}")
+    else:
+        print(f"\nTo use:")
+        print(f"  jupyter notebook \"{notebook_path}\"")
 
 
 if __name__ == "__main__":
