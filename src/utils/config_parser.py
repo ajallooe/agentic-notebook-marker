@@ -44,8 +44,9 @@ def parse_overview(overview_path: str) -> Dict[str, Any]:
     system_config = load_system_config()
 
     # Start with system defaults, then override with assignment-specific values
+    # No hardcoded provider/model - must come from config.yaml or overview.md
     config = {
-        'default_provider': system_config.get('default_provider', 'claude'),
+        'default_provider': system_config.get('default_provider', ''),
         'default_model': system_config.get('default_model', ''),
         'max_parallel': system_config.get('max_parallel', 4),
         'base_file': '',
