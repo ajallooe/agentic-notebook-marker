@@ -386,8 +386,8 @@ run_stage_for_all() {
 
         echo
 
-        # Small delay between assignments to avoid Gemini session issues
-        sleep 2
+        # Delay between assignments to avoid Gemini API session/rate issues
+        sleep 5
     done
 
     # Report results
