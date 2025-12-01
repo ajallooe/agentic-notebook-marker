@@ -15,6 +15,10 @@ default_provider: claude
 # Default Model (optional)
 # Leave empty to use each provider's built-in default model.
 # When specified, this model is used regardless of provider.
+# Examples by provider:
+#   Claude models: claude-sonnet-4, claude-opus-4-5, claude-haiku-4-5
+#   Gemini models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-3-pro-preview
+#   Codex models: gpt-5.1-codex-max, gpt-5.1-codex-mini, gpt-5.1
 default_model:
 
 # Parallel execution settings
