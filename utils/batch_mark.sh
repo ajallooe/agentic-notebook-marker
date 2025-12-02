@@ -272,26 +272,30 @@ if [[ -z "$PROVIDER" && -n "$MODEL" ]]; then
     fi
 fi
 
-# Validate we have at least provider or model
-if [[ -z "$PROVIDER" && -z "$MODEL" ]]; then
-    log_error "--model or --provider is required"
+# Validate we have at least provider, model, or api-model
+# (if none specified, will fall back to per-assignment overview.md or project defaults)
+if [[ -z "$PROVIDER" && -z "$MODEL" && -z "$API_MODEL" ]]; then
+    log_error "--model, --provider, or --api-model is required"
     usage
 fi
 
-# If we only have provider (no model), that's fine - CLI will use its default
-if [[ -z "$PROVIDER" ]]; then
+# If we have --api-model but no --provider/--model, that's fine for headless workflows
+# The per-assignment overview.md will provide defaults for any CLI fallback
+if [[ -z "$PROVIDER" && -z "$API_MODEL" ]]; then
     log_error "Could not determine provider"
     usage
 fi
 
-# Validate provider
-case "$PROVIDER" in
-    claude|gemini|codex) ;;
-    *)
-        log_error "Invalid provider: $PROVIDER (must be claude, gemini, or codex)"
-        exit 1
-        ;;
-esac
+# Validate provider if specified
+if [[ -n "$PROVIDER" ]]; then
+    case "$PROVIDER" in
+        claude|gemini|codex) ;;
+        *)
+            log_error "Invalid provider: $PROVIDER (must be claude, gemini, or codex)"
+            exit 1
+            ;;
+    esac
+fi
 
 # Validate start round
 if [[ "$START_ROUND" -lt 1 || "$START_ROUND" -gt 5 ]]; then
@@ -325,14 +329,19 @@ echo "              BATCH MARKING - STAGED WORKFLOW"
 echo "=================================================================="
 echo
 log_info "Found ${#ASSIGNMENTS[@]} assignment(s) to process"
-log_info "Provider: $PROVIDER"
+if [[ -n "$PROVIDER" ]]; then
+    log_info "Provider: $PROVIDER"
+fi
 if [[ -n "$MODEL" ]]; then
     log_info "Model: $MODEL"
-else
+elif [[ -n "$PROVIDER" ]]; then
     log_info "Model: (provider default)"
 fi
 if [[ -n "$API_MODEL" ]]; then
     log_info "API Model: $API_MODEL (headless stages will use direct API calls)"
+fi
+if [[ -z "$PROVIDER" && -z "$MODEL" && -n "$API_MODEL" ]]; then
+    log_info "CLI fallback: per-assignment overview.md defaults"
 fi
 if [[ "$START_ROUND" -gt 1 ]]; then
     log_info "Starting from round: $START_ROUND"
@@ -480,8 +489,12 @@ run_stage_for_all() {
 
         # Build command
         local cmd=("$mark_script" "$assignment_dir")
-        cmd+=("--provider" "$PROVIDER")
-        cmd+=("--model" "$MODEL")
+        if [[ -n "$PROVIDER" ]]; then
+            cmd+=("--provider" "$PROVIDER")
+        fi
+        if [[ -n "$MODEL" ]]; then
+            cmd+=("--model" "$MODEL")
+        fi
         cmd+=("--stop-after" "$stop_after")
 
         if [[ -n "$PARALLEL_OVERRIDE" ]]; then
@@ -690,8 +703,12 @@ if [[ "$START_ROUND" -le 5 ]]; then
 
         # Build command (NO --stop-after for completion)
         cmd=("$mark_script" "$assignment_dir")
-        cmd+=("--provider" "$PROVIDER")
-        cmd+=("--model" "$MODEL")
+        if [[ -n "$PROVIDER" ]]; then
+            cmd+=("--provider" "$PROVIDER")
+        fi
+        if [[ -n "$MODEL" ]]; then
+            cmd+=("--model" "$MODEL")
+        fi
 
         if [[ -n "$PARALLEL_OVERRIDE" ]]; then
             cmd+=("--parallel" "$PARALLEL_OVERRIDE")
