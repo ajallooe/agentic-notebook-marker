@@ -256,10 +256,14 @@ if [[ -n "$API_MODEL" ]]; then
     log_info "  API model: $API_MODEL (headless stages will use direct API calls)"
 fi
 
-# Override MAX_PARALLEL if --parallel flag provided
+# Override MAX_PARALLEL if --parallel flag provided, or use API_MAX_PARALLEL for API mode
 if [[ -n "$PARALLEL_OVERRIDE" ]]; then
     MAX_PARALLEL="$PARALLEL_OVERRIDE"
     log_info "  Max parallel: $MAX_PARALLEL (overridden by --parallel)"
+elif [[ -n "$API_MODEL" ]]; then
+    # Use higher parallelism for API mode (better rate limits)
+    MAX_PARALLEL="${API_MAX_PARALLEL:-32}"
+    log_info "  Max parallel: $MAX_PARALLEL (API mode default)"
 else
     log_info "  Max parallel: $MAX_PARALLEL"
 fi

@@ -22,7 +22,8 @@ default_provider: claude
 default_model:
 
 # Parallel execution settings
-max_parallel: 4
+max_parallel: 4           # Default for CLI mode
+api_max_parallel: 32      # Default for API mode (higher due to better rate limits)
 
 # Batch processing settings
 # Delay (in seconds) between assignments during batch runs

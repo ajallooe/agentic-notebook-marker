@@ -254,10 +254,14 @@ if [[ "$AUTO_APPROVE" == true ]]; then
     log_info "  Auto-approve: ENABLED (skipping interactive stages)"
 fi
 
-# Apply --parallel override if provided
+# Apply --parallel override if provided, or use API_MAX_PARALLEL for API mode
 if [[ -n "$PARALLEL_OVERRIDE" ]]; then
     MAX_PARALLEL="$PARALLEL_OVERRIDE"
     log_info "  Max parallel: $MAX_PARALLEL (overridden by --parallel)"
+elif [[ -n "$API_MODEL" ]]; then
+    # Use higher parallelism for API mode (better rate limits)
+    MAX_PARALLEL="${API_MAX_PARALLEL:-32}"
+    log_info "  Max parallel: $MAX_PARALLEL (API mode default)"
 else
     log_info "  Max parallel: $MAX_PARALLEL"
 fi

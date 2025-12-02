@@ -86,6 +86,20 @@ def get_max_parallel():
     return config.get("max_parallel", 4)
 
 
+def get_api_max_parallel():
+    """
+    Get the max parallel workers for API mode from system config.
+
+    API mode can handle higher parallelism due to better rate limits
+    compared to CLI tools.
+
+    Returns:
+        int: The max parallel workers for API mode (defaults to 32 if not configured).
+    """
+    config = load_system_config()
+    return config.get("api_max_parallel", 32)
+
+
 def is_verbose():
     """
     Get the verbose setting from system config.
