@@ -110,3 +110,6 @@ submissions_manifest.json
 
 # Extracted activities (regenerated each time)
 **/extracted_activities/
+
+# API keys
+.secrets/

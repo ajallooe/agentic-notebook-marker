@@ -52,7 +52,7 @@ def load_grades_csv(csv_path: Path) -> list:
     return records
 
 
-def call_llm(prompt: str, provider: str, model: str = None) -> str:
+def call_llm(prompt: str, provider: str, model: str = None, api_model: str = None) -> str:
     """Call LLM via llm_caller.sh and return the response."""
 
     # Write prompt to temp file to handle special characters
@@ -69,6 +69,8 @@ def call_llm(prompt: str, provider: str, model: str = None) -> str:
         ]
         if model:
             cmd.extend(['--model', model])
+        if api_model:
+            cmd.extend(['--api-model', api_model])
 
         result = subprocess.run(
             cmd,
@@ -88,7 +90,8 @@ def call_llm(prompt: str, provider: str, model: str = None) -> str:
 
 
 def summarize_feedback(student_name: str, total_mark: str, feedback: str,
-                       provider: str, model: str = None, total_possible: int = 100) -> str:
+                       provider: str, model: str = None, api_model: str = None,
+                       total_possible: int = 100) -> str:
     """Use LLM to summarize feedback into a single paragraph."""
 
     if not feedback or not feedback.strip():
@@ -105,7 +108,8 @@ def summarize_feedback(student_name: str, total_mark: str, feedback: str,
         result = call_llm(
             prompt=prompt,
             provider=provider,
-            model=model
+            model=model,
+            api_model=api_model
         )
 
         # Clean up the result - remove any markdown or extra whitespace
@@ -201,6 +205,10 @@ def main():
         action='store_true',
         help='Show what would be done without calling LLM'
     )
+    parser.add_argument(
+        '--api-model',
+        help='Model for direct API calls (uses API instead of CLI for headless)'
+    )
 
     args = parser.parse_args()
 
@@ -263,6 +271,7 @@ def main():
                 feedback=feedback,
                 provider=provider,
                 model=model,
+                api_model=args.api_model,
                 total_possible=args.total_marks
             )
             print("done")

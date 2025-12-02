@@ -145,6 +145,7 @@ Model/Provider (at least one required):
                       Provider is auto-resolved from model name
   --provider NAME     LLM provider (claude, gemini, or codex)
                       Only needed if model is not specified or unrecognized
+  --api-model NAME    Use direct API calls for headless stages (requires API key)
 
 Options:
   --parallel N        Override max parallel tasks for all assignments
@@ -211,6 +212,7 @@ PARALLEL_OVERRIDE=""
 NO_RESUME=false
 PROVIDER=""
 MODEL=""
+API_MODEL=""
 START_ROUND=1
 AUTO_APPROVE=false
 FORCE_COMPLETE=false
@@ -227,6 +229,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --model)
             MODEL="$2"
+            shift 2
+            ;;
+        --api-model)
+            API_MODEL="$2"
             shift 2
             ;;
         --no-resume)
@@ -324,6 +330,9 @@ if [[ -n "$MODEL" ]]; then
     log_info "Model: $MODEL"
 else
     log_info "Model: (provider default)"
+fi
+if [[ -n "$API_MODEL" ]]; then
+    log_info "API Model: $API_MODEL (headless stages will use direct API calls)"
 fi
 if [[ "$START_ROUND" -gt 1 ]]; then
     log_info "Starting from round: $START_ROUND"
@@ -477,6 +486,10 @@ run_stage_for_all() {
 
         if [[ -n "$PARALLEL_OVERRIDE" ]]; then
             cmd+=("--parallel" "$PARALLEL_OVERRIDE")
+        fi
+
+        if [[ -n "$API_MODEL" ]]; then
+            cmd+=("--api-model" "$API_MODEL")
         fi
 
         if [[ "$NO_RESUME" == true ]]; then
@@ -682,6 +695,10 @@ if [[ "$START_ROUND" -le 5 ]]; then
 
         if [[ -n "$PARALLEL_OVERRIDE" ]]; then
             cmd+=("--parallel" "$PARALLEL_OVERRIDE")
+        fi
+
+        if [[ -n "$API_MODEL" ]]; then
+            cmd+=("--api-model" "$API_MODEL")
         fi
 
         if [[ "$AUTO_APPROVE" == true ]]; then

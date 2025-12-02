@@ -29,13 +29,22 @@
 #   --prompt-file <file>    Read prompt from file
 #
 # Optional:
-#   --model <name>          Model to use (passed directly to CLI, no validation)
+#   --model <name>          Model to use for CLI calls (passed directly to CLI)
+#   --api-model <name>      Model for API calls; when specified, uses direct API
+#                           instead of CLI for headless calls (requires SDK + API key)
+#   --max-tokens <n>        Max output tokens for API calls (default: 8192)
 #   --mode <mode>           interactive or headless (default: interactive)
 #   --output <file>         Capture output to file
 #   --working-dir <dir>     Set working directory for file operations
 #   --auto-approve          Skip all permission prompts (use with caution)
 #   --write-dirs <dirs>     Space-separated list of directories to allow writes
 #   --help                  Show this help message
+#
+# API Mode:
+#   When --api-model is specified AND --mode is headless, uses direct API calls
+#   instead of CLI tools. Requires:
+#     - Python SDK: pip install anthropic google-generativeai openai
+#     - API key in environment: ANTHROPIC_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY
 #
 # Config File Format (YAML):
 #   default_provider: claude
@@ -57,6 +66,7 @@ set -euo pipefail
 # ============================================================================
 PROVIDER=""
 MODEL=""
+API_MODEL=""
 MODE="interactive"
 PROMPT=""
 PROMPT_FILE=""
@@ -68,6 +78,7 @@ CONFIG_FILE=""
 STATS_FILE=""
 STATS_STAGE="unknown"
 STATS_CONTEXT=""
+MAX_TOKENS=""
 
 # Script directory for finding models.yaml
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -236,6 +247,14 @@ while [[ $# -gt 0 ]]; do
             MODEL="$2"
             shift 2
             ;;
+        --api-model)
+            API_MODEL="$2"
+            shift 2
+            ;;
+        --max-tokens)
+            MAX_TOKENS="$2"
+            shift 2
+            ;;
         --mode)
             MODE="$2"
             shift 2
@@ -333,8 +352,9 @@ if [[ -n "$PROVIDER" && -z "$MODEL" ]]; then
     # MODEL can be empty - that's fine, CLI will use its default
 fi
 
-if [[ -z "$PROVIDER" ]]; then
-    echo "Error: --provider or --model is required (or use --config with default_provider)" >&2
+# Provider is required for CLI mode, but not for API mode
+if [[ -z "$PROVIDER" && -z "$API_MODEL" ]]; then
+    echo "Error: --provider, --model, or --api-model is required" >&2
     exit 1
 fi
 
@@ -570,7 +590,42 @@ call_codex() {
 }
 
 # ============================================================================
-# Route to provider
+# API Mode: Use direct API calls when --api-model is specified AND headless
+# ============================================================================
+if [[ -n "$API_MODEL" && "$MODE" == "headless" ]]; then
+    API_CALLER="$SCRIPT_DIR/api/caller.py"
+
+    if [[ ! -f "$API_CALLER" ]]; then
+        echo "Error: API caller not found: $API_CALLER" >&2
+        exit 1
+    fi
+
+    api_args=(
+        --model "$API_MODEL"
+        --prompt "$PROMPT"
+    )
+
+    if [[ -n "$STATS_FILE" ]]; then
+        api_args+=(--stats-file "$STATS_FILE")
+        api_args+=(--stats-stage "$STATS_STAGE")
+        api_args+=(--stats-context "$STATS_CONTEXT")
+    fi
+
+    if [[ -n "$MAX_TOKENS" ]]; then
+        api_args+=(--max-tokens "$MAX_TOKENS")
+    fi
+
+    if [[ -n "$OUTPUT_FILE" ]]; then
+        python3 "$API_CALLER" "${api_args[@]}" > "$OUTPUT_FILE"
+    else
+        python3 "$API_CALLER" "${api_args[@]}"
+    fi
+
+    exit $?
+fi
+
+# ============================================================================
+# Route to provider (CLI mode)
 # ============================================================================
 case "$PROVIDER" in
     claude)

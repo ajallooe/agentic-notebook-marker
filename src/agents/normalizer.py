@@ -124,6 +124,10 @@ def main():
         "--stats-file",
         help="Path to append token usage stats (JSONL format)"
     )
+    parser.add_argument(
+        "--api-model",
+        help="Model for direct API calls (uses API instead of CLI for headless)"
+    )
 
     args = parser.parse_args()
 
@@ -181,6 +185,9 @@ def main():
 
         if args.model:
             cmd.extend(["--model", args.model])
+
+        if args.api_model:
+            cmd.extend(["--api-model", args.api_model])
 
         if args.stats_file:
             cmd.extend([

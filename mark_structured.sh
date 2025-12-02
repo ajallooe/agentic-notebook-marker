@@ -47,6 +47,7 @@ STOP_AFTER_STAGE=""
 PARALLEL_OVERRIDE=""
 PROVIDER_OVERRIDE=""
 MODEL_OVERRIDE=""
+API_MODEL=""  # When set, use direct API calls instead of CLI for headless stages
 AUTO_APPROVE=false  # Auto-approve LLM proposals without instructor interaction
 FORCE_COMPLETE=false  # Force complete by generating zero-mark feedback for failed students
 
@@ -90,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             MODEL_OVERRIDE="$2"
             shift 2
             ;;
+        --api-model)
+            API_MODEL="$2"
+            shift 2
+            ;;
         --auto-approve)
             AUTO_APPROVE=true
             shift
@@ -118,7 +123,8 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo ""
     echo "Options:"
     echo "  --provider NAME         Override default_provider from overview.md"
-    echo "  --model NAME            Override default_model from overview.md"
+    echo "  --model NAME            Override default_model from overview.md (for CLI calls)"
+    echo "  --api-model NAME        Use direct API calls for headless stages (requires API key)"
     echo "  --force-xargs           Force use of xargs instead of GNU parallel"
     echo "  --resume                Resume from last checkpoint (default)"
     echo "  --no-resume             Start from scratch, don't resume"
@@ -246,6 +252,9 @@ fi
 log_info "Configuration:"
 log_info "  Provider: $DEFAULT_PROVIDER${PROVIDER_OVERRIDE:+ (overridden)}"
 log_info "  Default model: ${DEFAULT_MODEL:-default}${MODEL_OVERRIDE:+ (overridden)}"
+if [[ -n "$API_MODEL" ]]; then
+    log_info "  API model: $API_MODEL (headless stages will use direct API calls)"
+fi
 
 # Override MAX_PARALLEL if --parallel flag provided
 if [[ -n "$PARALLEL_OVERRIDE" ]]; then
@@ -453,6 +462,10 @@ if [[ $SKIP_PATTERN_DESIGNER == false ]]; then
         PATTERN_CMD+=(--model "$MODEL_PATTERN_DESIGNER")
     fi
 
+    if [[ -n "$API_MODEL" ]]; then
+        PATTERN_CMD+=(--api-model "$API_MODEL")
+    fi
+
     if [[ "$AUTO_APPROVE" == true ]]; then
         PATTERN_CMD+=(--auto-approve)
     fi
@@ -501,7 +514,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
             :
         else
             # Add task to list
-            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$output_file' --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} --stats-file '$STATS_FILE'" >> "$MARKER_TASKS"
+            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$output_file' --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$MARKER_TASKS"
         fi
     done
 done
@@ -575,6 +588,7 @@ for activity in $(seq 1 $NUM_ACTIVITIES); do
             --output "$SCORING_OUTPUT" \
             --provider "$DEFAULT_PROVIDER" \
             ${MODEL_NORMALIZER:+--model "$MODEL_NORMALIZER"} \
+            ${API_MODEL:+--api-model "$API_MODEL"} \
             --type structured \
             --stats-file "$STATS_FILE"
 
@@ -677,7 +691,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type structured --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
+        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type structured --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
     fi
 done
 
@@ -872,7 +886,8 @@ if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null;
             "${GRADEBOOK_ARGS[@]}" \
             --output-path "$TRANSLATION_DIR" \
             --provider "$DEFAULT_PROVIDER" \
-            ${MODEL_AGGREGATOR:+--model "$MODEL_AGGREGATOR"}
+            ${MODEL_AGGREGATOR:+--model "$MODEL_AGGREGATOR"} \
+            ${API_MODEL:+--api-model "$API_MODEL"}
 
         if [[ $? -ne 0 ]]; then
             log_error "Translation mapping failed"
@@ -929,6 +944,7 @@ if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null;
                                 "$filled_csv" \
                                 --provider "$DEFAULT_PROVIDER" \
                                 ${MODEL_AGGREGATOR:+--model "$MODEL_AGGREGATOR"} \
+                                ${API_MODEL:+--api-model "$API_MODEL"} \
                                 --total-marks "$TOTAL_MARKS"
 
                             if [[ $? -eq 0 ]]; then

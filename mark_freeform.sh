@@ -49,6 +49,7 @@ AUTO_APPROVE=false
 FORCE_COMPLETE=false
 PROVIDER_OVERRIDE=""
 MODEL_OVERRIDE=""
+API_MODEL=""  # When set, use direct API calls instead of CLI for headless stages
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -94,6 +95,10 @@ while [[ $# -gt 0 ]]; do
             MODEL_OVERRIDE="$2"
             shift 2
             ;;
+        --api-model)
+            API_MODEL="$2"
+            shift 2
+            ;;
         -*)
             echo "Unknown option: $1" >&2
             echo "Usage: $0 <assignment_directory> [OPTIONS]" >&2
@@ -122,7 +127,8 @@ if [[ -z "${ASSIGNMENT_DIR:-}" ]]; then
     echo "  --auto-approve        Skip interactive stages (pattern design, dashboard approval)"
     echo "  --force-complete      Generate zero-mark feedback for failed students and continue"
     echo "  --provider NAME       Override LLM provider (claude, gemini, or codex)"
-    echo "  --model NAME          Override model name"
+    echo "  --model NAME          Override model name (for CLI calls)"
+    echo "  --api-model NAME      Use direct API calls for headless stages (requires API key)"
     exit 1
 fi
 
@@ -241,6 +247,9 @@ fi
 log_info "Configuration:"
 log_info "  Provider: $DEFAULT_PROVIDER${PROVIDER_OVERRIDE:+ (overridden)}"
 log_info "  Default model: ${DEFAULT_MODEL:-default}${MODEL_OVERRIDE:+ (overridden)}"
+if [[ -n "$API_MODEL" ]]; then
+    log_info "  API model: $API_MODEL (headless stages will use direct API calls)"
+fi
 if [[ "$AUTO_APPROVE" == true ]]; then
     log_info "  Auto-approve: ENABLED (skipping interactive stages)"
 fi
@@ -399,6 +408,7 @@ else
         --session-log "$PATTERN_DESIGNER_SESSION" \
         --provider "$DEFAULT_PROVIDER" \
         ${MODEL_PATTERN_DESIGNER:+--model "$MODEL_PATTERN_DESIGNER"} \
+        ${API_MODEL:+--api-model "$API_MODEL"} \
         --type freeform \
         $([[ "$DIFFERENT_PROBLEMS" == "true" ]] && echo "--different-problems") \
         $([[ "$AUTO_APPROVE" == "true" ]] && echo "--auto-approve")
@@ -449,7 +459,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        task_cmd="python3 '$SRC_DIR/agents/marker.py' --student '$student_name' --submission '$submission_path' --criteria '$PROCESSED_DIR/marking_criteria.md' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} --stats-file '$STATS_FILE'"
+        task_cmd="python3 '$SRC_DIR/agents/marker.py' --student '$student_name' --submission '$submission_path' --criteria '$PROCESSED_DIR/marking_criteria.md' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'"
 
         # For different-problems assignments, pass problem context
         if [[ "$DIFFERENT_PROBLEMS" == "true" && -f "$PROBLEM_CONTEXTS" ]]; then
@@ -514,6 +524,7 @@ else
         --output "$SCORING_OUTPUT" \
         --provider "$DEFAULT_PROVIDER" \
         ${MODEL_NORMALIZER:+--model "$MODEL_NORMALIZER"} \
+        ${API_MODEL:+--api-model "$API_MODEL"} \
         --type freeform \
         --stats-file "$STATS_FILE"
 
@@ -601,7 +612,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
+        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
     fi
 done
 
@@ -791,7 +802,8 @@ if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null;
             "${GRADEBOOK_ARGS[@]}" \
             --output-path "$TRANSLATION_DIR" \
             --provider "$DEFAULT_PROVIDER" \
-            ${MODEL_AGGREGATOR:+--model "$MODEL_AGGREGATOR"}
+            ${MODEL_AGGREGATOR:+--model "$MODEL_AGGREGATOR"} \
+            ${API_MODEL:+--api-model "$API_MODEL"}
 
         if [[ $? -ne 0 ]]; then
             log_error "Translation mapping failed"
@@ -852,6 +864,7 @@ if [[ -d "$GRADEBOOKS_DIR" ]] && compgen -G "$GRADEBOOKS_DIR/*.csv" > /dev/null;
                                 "$filled_csv" \
                                 --provider "$DEFAULT_PROVIDER" \
                                 ${MODEL_AGGREGATOR:+--model "$MODEL_AGGREGATOR"} \
+                                ${API_MODEL:+--api-model "$API_MODEL"} \
                                 --total-marks "$TOTAL_MARKS"
 
                             if [[ $? -eq 0 ]]; then

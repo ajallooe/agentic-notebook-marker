@@ -79,6 +79,10 @@ def main():
         action="store_true",
         help="Auto-approve proposals without instructor interaction (headless mode)"
     )
+    parser.add_argument(
+        "--api-model",
+        help="Model for direct API calls (uses API instead of CLI for headless)"
+    )
 
     args = parser.parse_args()
 
@@ -202,6 +206,10 @@ The marker agents will receive each group's specific problem description along w
 
         if args.model:
             cmd.extend(["--model", args.model])
+
+        # Only pass --api-model for headless mode (auto-approve)
+        if args.api_model and args.auto_approve:
+            cmd.extend(["--api-model", args.api_model])
 
         # For interactive mode, inherit stdin/stdout/stderr to preserve TTY
         # For headless mode, just capture output

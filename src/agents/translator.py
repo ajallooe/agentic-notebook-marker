@@ -325,6 +325,7 @@ def main():
                        choices=['claude', 'gemini', 'codex'],
                        help='LLM provider (optional if --model is specified)')
     parser.add_argument('--model', help='Model to use (provider auto-resolved)')
+    parser.add_argument('--api-model', help='Model for direct API calls (currently unused - translator is interactive)')
 
     args = parser.parse_args()
 
