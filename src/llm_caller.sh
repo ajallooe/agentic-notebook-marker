@@ -80,14 +80,14 @@ show_help() {
 }
 
 # ============================================================================
-# Resolve provider from model name using models.yaml
+# Resolve provider from model name using models.yaml (strict validation)
 # ============================================================================
 resolve_provider_from_model() {
     local model_name="$1"
 
-    # First, try to look up in models.yaml
+    # Only allow models explicitly listed in models.yaml
+    # This catches typos like 'gemini-pro-2.5' instead of 'gemini-2.5-pro'
     if [[ -f "$MODELS_CONFIG" ]]; then
-        # Look for exact match in models section
         local provider
         provider=$(grep -E "^[[:space:]]*${model_name}:" "$MODELS_CONFIG" 2>/dev/null | \
                    sed 's/.*:[[:space:]]*//' | tr -d '"' | tr -d "'" || true)
@@ -97,22 +97,8 @@ resolve_provider_from_model() {
         fi
     fi
 
-    # Fallback: infer provider from model name prefix
-    case "$model_name" in
-        claude-*|claude[0-9]*)
-            echo "claude"
-            ;;
-        gemini-*|gemini[0-9]*)
-            echo "gemini"
-            ;;
-        gpt-*|o1*|o3*)
-            echo "codex"
-            ;;
-        *)
-            # Unknown model prefix
-            return 1
-            ;;
-    esac
+    # No fallback - model must be in models.yaml
+    return 1
 }
 
 # ============================================================================
@@ -317,7 +303,7 @@ fi
 # Resolve provider from model if not explicitly set
 # ============================================================================
 if [[ -z "$PROVIDER" && -n "$MODEL" ]]; then
-    PROVIDER=$(resolve_provider_from_model "$MODEL")
+    PROVIDER=$(resolve_provider_from_model "$MODEL" || true)
     if [[ -z "$PROVIDER" ]]; then
         echo "Error: Unknown model '$MODEL'" >&2
         echo "" >&2

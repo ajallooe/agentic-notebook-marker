@@ -165,27 +165,23 @@ def resolve_provider_from_model(model_name: str) -> str | None:
     """
     Resolve provider from model name using models.yaml.
 
+    Only returns a provider if the model is explicitly listed in models.yaml.
+    This catches typos like 'gemini-pro-2.5' instead of 'gemini-2.5-pro'.
+
     Args:
         model_name: The model name to look up.
 
     Returns:
-        str or None: The provider name, or None if not found.
+        str or None: The provider name, or None if model not found in models.yaml.
     """
     config = load_models_config()
     models = config.get('models', {})
 
-    # Direct lookup
+    # Only allow models explicitly listed in models.yaml
     if model_name in models:
         return models[model_name]
 
-    # Fallback: infer from model name prefix
-    if model_name.startswith('claude'):
-        return 'claude'
-    elif model_name.startswith('gemini'):
-        return 'gemini'
-    elif model_name.startswith('gpt-') or model_name.startswith('o1') or model_name.startswith('o3'):
-        return 'codex'
-
+    # No fallback inference - model must be in models.yaml
     return None
 
 

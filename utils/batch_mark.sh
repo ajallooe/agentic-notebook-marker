@@ -69,11 +69,11 @@ log_round() {
 # Models config for provider resolution
 MODELS_CONFIG="$PROJECT_ROOT/configs/models.yaml"
 
-# Resolve provider from model name
+# Resolve provider from model name (strict - must be in models.yaml)
 resolve_provider_from_model() {
     local model_name="$1"
 
-    # First, try to look up in models.yaml
+    # Only allow models explicitly listed in models.yaml
     if [[ -f "$MODELS_CONFIG" ]]; then
         local provider
         provider=$(grep -E "^[[:space:]]*${model_name}:" "$MODELS_CONFIG" 2>/dev/null | \
@@ -84,21 +84,8 @@ resolve_provider_from_model() {
         fi
     fi
 
-    # Fallback: infer provider from model name prefix
-    case "$model_name" in
-        claude-*|claude[0-9]*)
-            echo "claude"
-            ;;
-        gemini-*|gemini[0-9]*)
-            echo "gemini"
-            ;;
-        gpt-*|o1*|o3*)
-            echo "codex"
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    # No fallback - model must be in models.yaml to catch typos
+    return 1
 }
 
 # Show available models from models.yaml
@@ -270,7 +257,7 @@ done
 
 # Resolve provider from model if not explicitly set
 if [[ -z "$PROVIDER" && -n "$MODEL" ]]; then
-    PROVIDER=$(resolve_provider_from_model "$MODEL")
+    PROVIDER=$(resolve_provider_from_model "$MODEL" || true)
     if [[ -z "$PROVIDER" ]]; then
         log_error "Unknown model '$MODEL'"
         echo ""

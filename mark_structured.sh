@@ -156,7 +156,7 @@ eval "$("$SRC_DIR/utils/config_parser.py" "$OVERVIEW_FILE" --bash)"
 # Models config for provider resolution
 MODELS_CONFIG="$SCRIPT_DIR/configs/models.yaml"
 
-# Resolve provider from model name
+# Resolve provider from model name (strict - must be in models.yaml)
 resolve_provider_from_model() {
     local model_name="$1"
     if [[ -f "$MODELS_CONFIG" ]]; then
@@ -168,12 +168,8 @@ resolve_provider_from_model() {
             return 0
         fi
     fi
-    case "$model_name" in
-        claude-*|claude[0-9]*) echo "claude" ;;
-        gemini-*|gemini[0-9]*) echo "gemini" ;;
-        gpt-*|o1*|o3*) echo "codex" ;;
-        *) return 1 ;;
-    esac
+    # No fallback - model must be in models.yaml to catch typos
+    return 1
 }
 
 show_available_models() {
@@ -223,7 +219,7 @@ fi
 
 # Resolve provider from model if not set (priority: CLI > overview.md > project default)
 if [[ -z "$DEFAULT_PROVIDER" && -n "$DEFAULT_MODEL" ]]; then
-    DEFAULT_PROVIDER=$(resolve_provider_from_model "$DEFAULT_MODEL")
+    DEFAULT_PROVIDER=$(resolve_provider_from_model "$DEFAULT_MODEL" || true)
     if [[ -z "$DEFAULT_PROVIDER" ]]; then
         log_error "Unknown model '$DEFAULT_MODEL'"
         echo ""
