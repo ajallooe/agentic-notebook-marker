@@ -564,6 +564,65 @@ else
     log_info "No marker tasks to run"
 fi
 
+# Check for failed marker tasks and handle with --force-complete
+FAILED_MARKERS=0
+if [[ -d "$LOGS_DIR/marker_logs" ]]; then
+    # Count stderr files with content (indicating failures)
+    FAILED_MARKERS=$(find "$LOGS_DIR/marker_logs" -name "stderr" -type f -size +0 2>/dev/null | wc -l | tr -d ' ')
+fi
+
+if [[ $FAILED_MARKERS -gt 0 ]]; then
+    log_warning "Found $FAILED_MARKERS failed marker task(s)"
+
+    if [[ "$FORCE_COMPLETE" == true ]]; then
+        log_info "Creating placeholder markings for failed tasks (--force-complete)..."
+
+        # Find all expected marking files that don't exist
+        PLACEHOLDERS_CREATED=0
+        jq -r '.submissions[] | .student_name' "$SUBMISSIONS_MANIFEST" | while read -r student_name; do
+            for activity in $(seq 1 $NUM_ACTIVITIES); do
+                output_file="$MARKINGS_DIR/${student_name}_A${activity}.md"
+
+                if [[ ! -f "$output_file" ]]; then
+                    # Create placeholder marking
+                    cat > "$output_file" << EOF
+# Marking for ${student_name} - Activity A${activity}
+
+## Status: MARKING FAILED
+
+**Error**: The marker agent failed to process this submission. This may be due to:
+- Missing activity markers in the notebook
+- Invalid notebook format
+- Extraction errors
+
+## Mistakes
+- **Critical**: Submission could not be evaluated due to processing errors
+
+## Positive Points
+- None identified (submission could not be evaluated)
+
+## Summary
+This submission could not be automatically marked. Manual review may be required.
+
+---
+*Auto-generated placeholder due to marker failure (--force-complete)*
+EOF
+                    ((PLACEHOLDERS_CREATED++)) || true
+                fi
+            done
+        done
+
+        # Re-count to report
+        PLACEHOLDERS_CREATED=$(find "$MARKINGS_DIR" -name "*_A*.md" -newer "$LOGS_DIR/marker_logs" 2>/dev/null | wc -l | tr -d ' ')
+        log_success "Created placeholder markings for failed tasks"
+    else
+        log_error "Some marker tasks failed. Options:"
+        log_info "  1. Fix the issues and re-run (will resume from failed tasks)"
+        log_info "  2. Use --force-complete to create placeholder markings and continue"
+        exit 1
+    fi
+fi
+
 # Stop after stage 4 if requested
 if [[ "$STOP_AFTER_STAGE" == "4" ]]; then
     log_info "Stopping after stage 4 as requested (--stop-after 4)"

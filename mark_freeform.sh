@@ -504,6 +504,59 @@ else
     log_success "Marker agents completed"
 fi
 
+# Check for failed marker tasks and handle with --force-complete
+FAILED_MARKERS=0
+if [[ -d "$LOGS_DIR/marker_logs" ]]; then
+    # Count stderr files with content (indicating failures)
+    FAILED_MARKERS=$(find "$LOGS_DIR/marker_logs" -name "stderr" -type f -size +0 2>/dev/null | wc -l | tr -d ' ')
+fi
+
+if [[ $FAILED_MARKERS -gt 0 ]]; then
+    log_warning "Found $FAILED_MARKERS failed marker task(s)"
+
+    if [[ "$FORCE_COMPLETE" == true ]]; then
+        log_info "Creating placeholder markings for failed tasks (--force-complete)..."
+
+        # Find all expected marking files that don't exist
+        jq -r '.submissions[] | .student_name' "$SUBMISSIONS_MANIFEST" | while read -r student_name; do
+            output_file="$MARKINGS_DIR/${student_name}.md"
+
+            if [[ ! -f "$output_file" ]]; then
+                # Create placeholder marking
+                cat > "$output_file" << EOF
+# Marking for ${student_name}
+
+## Status: MARKING FAILED
+
+**Error**: The marker agent failed to process this submission. This may be due to:
+- Invalid notebook format
+- Processing errors
+- Timeout or API issues
+
+## Mistakes
+- **Critical**: Submission could not be evaluated due to processing errors
+
+## Positive Points
+- None identified (submission could not be evaluated)
+
+## Summary
+This submission could not be automatically marked. Manual review may be required.
+
+---
+*Auto-generated placeholder due to marker failure (--force-complete)*
+EOF
+            fi
+        done
+
+        log_success "Created placeholder markings for failed tasks"
+    else
+        log_error "Some marker tasks failed. Options:"
+        log_info "  1. Fix the issues and re-run (will resume from failed tasks)"
+        log_info "  2. Use --force-complete to create placeholder markings and continue"
+        exit 1
+    fi
+fi
+
 # Stop after stage 3 if requested
 if [[ "$STOP_AFTER_STAGE" == "3" ]]; then
     log_info "Stopping after stage 3 as requested (--stop-after 3)"
