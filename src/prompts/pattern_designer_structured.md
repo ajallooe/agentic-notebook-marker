@@ -102,12 +102,14 @@ For each activity `A{{i}}`, create a markdown file with:
 - Output format requirements
 - Any pre-filled code that shouldn't be changed
 
-**Output Format**: For each activity, create a separate file:
+**Output Format**: You MUST use the Write tool to create a separate file for each activity:
 - `{processed_dir}/activities/A{{i}}_criteria.md`
+
+**IMPORTANT**: Do not just output the content - you must actually use the Write tool to save each file.
 
 ### Phase 4: Final Document
 
-Create `{processed_dir}/rubric.md` containing:
+You MUST use the Write tool to create `{processed_dir}/rubric.md` containing:
 1. The complete rubric (approved by instructor)
 2. Summary of marking approach per activity
 3. Overall marking philosophy
@@ -118,9 +120,11 @@ Create `{processed_dir}/rubric.md` containing:
 1. Start by analyzing the base notebook
 2. Ask clarifying questions if needed (be specific!)
 3. Present the rubric and wait for approval
-4. After approval, create all activity criteria files
-5. Create the final rubric document
+4. After approval, **use the Write tool** to create all activity criteria files
+5. **Use the Write tool** to create the final rubric document
 6. Signal completion by saying: **"Marking pattern design complete. You may exit to continue the marking process."**
+
+**CRITICAL**: You must actually create the files using the Write tool, not just output their contents. The marking process will fail if the files don't exist.
 
 ## Important Reminders
 
