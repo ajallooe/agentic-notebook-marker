@@ -120,6 +120,10 @@ def main():
         default="structured",
         help="Assignment type"
     )
+    parser.add_argument(
+        "--stats-file",
+        help="Path to append token usage stats (JSONL format)"
+    )
 
     args = parser.parse_args()
 
@@ -198,6 +202,13 @@ Total: [sum] / [total_available]
 
         if args.model:
             cmd.extend(["--model", args.model])
+
+        if args.stats_file:
+            cmd.extend([
+                "--stats-file", args.stats_file,
+                "--stats-stage", "unifier",
+                "--stats-context", args.student
+            ])
 
         result = subprocess.run(cmd, capture_output=True, text=True)
 

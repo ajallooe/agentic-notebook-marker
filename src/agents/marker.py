@@ -190,6 +190,10 @@ def main():
         "--problem-context",
         help="Path to problem_contexts.json for different-problem assignments"
     )
+    parser.add_argument(
+        "--stats-file",
+        help="Path to append token usage stats (JSONL format)"
+    )
 
     args = parser.parse_args()
 
@@ -248,6 +252,16 @@ def main():
 
         if args.model:
             cmd.extend(["--model", args.model])
+
+        if args.stats_file:
+            context = f"{args.student}"
+            if args.activity:
+                context += f"/{args.activity}"
+            cmd.extend([
+                "--stats-file", args.stats_file,
+                "--stats-stage", "marker",
+                "--stats-context", context
+            ])
 
         result = subprocess.run(cmd, capture_output=True, text=True)
 

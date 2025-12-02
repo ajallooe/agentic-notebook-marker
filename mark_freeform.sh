@@ -287,8 +287,10 @@ NORMALIZED_DIR="$PROCESSED_DIR/normalized"
 FINAL_DIR="$PROCESSED_DIR/final"
 LOGS_DIR="$PROCESSED_DIR/logs"
 SESSIONS_DIR="$PROCESSED_DIR/sessions"
+STATS_DIR="$PROCESSED_DIR/stats"
+STATS_FILE="$STATS_DIR/token_usage.jsonl"
 
-mkdir -p "$MARKINGS_DIR" "$NORMALIZED_DIR" "$FINAL_DIR" "$LOGS_DIR" "$SESSIONS_DIR"
+mkdir -p "$MARKINGS_DIR" "$NORMALIZED_DIR" "$FINAL_DIR" "$LOGS_DIR" "$SESSIONS_DIR" "$STATS_DIR"
 
 # Clean mode: remove processed directory
 if [[ "${CLEAN_MODE:-false}" == true ]]; then
@@ -438,7 +440,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        task_cmd="python3 '$SRC_DIR/agents/marker.py' --student '$student_name' --submission '$submission_path' --criteria '$PROCESSED_DIR/marking_criteria.md' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'}"
+        task_cmd="python3 '$SRC_DIR/agents/marker.py' --student '$student_name' --submission '$submission_path' --criteria '$PROCESSED_DIR/marking_criteria.md' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} --stats-file '$STATS_FILE'"
 
         # For different-problems assignments, pass problem context
         if [[ "$DIFFERENT_PROBLEMS" == "true" && -f "$PROBLEM_CONTEXTS" ]]; then
@@ -503,7 +505,8 @@ else
         --output "$SCORING_OUTPUT" \
         --provider "$DEFAULT_PROVIDER" \
         ${MODEL_NORMALIZER:+--model "$MODEL_NORMALIZER"} \
-        --type freeform
+        --type freeform \
+        --stats-file "$STATS_FILE"
 
     if [[ $? -ne 0 ]]; then
         log_error "Normalizer failed"
@@ -589,7 +592,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'}" >> "$UNIFIER_TASKS"
+        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type freeform --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
     fi
 done
 

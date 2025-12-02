@@ -290,8 +290,10 @@ NORMALIZED_DIR="$PROCESSED_DIR/normalized"
 FINAL_DIR="$PROCESSED_DIR/final"
 LOGS_DIR="$PROCESSED_DIR/logs"
 SESSIONS_DIR="$PROCESSED_DIR/sessions"
+STATS_DIR="$PROCESSED_DIR/stats"
+STATS_FILE="$STATS_DIR/token_usage.jsonl"
 
-mkdir -p "$ACTIVITIES_DIR" "$MARKINGS_DIR" "$NORMALIZED_DIR" "$FINAL_DIR" "$LOGS_DIR" "$SESSIONS_DIR"
+mkdir -p "$ACTIVITIES_DIR" "$MARKINGS_DIR" "$NORMALIZED_DIR" "$FINAL_DIR" "$LOGS_DIR" "$SESSIONS_DIR" "$STATS_DIR"
 
 # Clean mode: remove processed directory
 if [[ "${CLEAN_MODE:-false}" == true ]]; then
@@ -490,7 +492,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
             :
         else
             # Add task to list
-            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$output_file' --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'}" >> "$MARKER_TASKS"
+            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$output_file' --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} --stats-file '$STATS_FILE'" >> "$MARKER_TASKS"
         fi
     done
 done
@@ -564,7 +566,8 @@ for activity in $(seq 1 $NUM_ACTIVITIES); do
             --output "$SCORING_OUTPUT" \
             --provider "$DEFAULT_PROVIDER" \
             ${MODEL_NORMALIZER:+--model "$MODEL_NORMALIZER"} \
-            --type structured
+            --type structured \
+            --stats-file "$STATS_FILE"
 
         if [[ $? -ne 0 ]]; then
             log_error "Normalizer failed for Activity $activity"
@@ -665,7 +668,7 @@ jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | w
         :
     else
         # Add task to list
-        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type structured --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'}" >> "$UNIFIER_TASKS"
+        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type structured --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
     fi
 done
 

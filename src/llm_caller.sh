@@ -65,6 +65,9 @@ WORKING_DIR=""
 AUTO_APPROVE=false
 WRITE_DIRS=""
 CONFIG_FILE=""
+STATS_FILE=""
+STATS_STAGE="unknown"
+STATS_CONTEXT=""
 
 # Script directory for finding models.yaml
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -265,6 +268,18 @@ while [[ $# -gt 0 ]]; do
             CONFIG_FILE="$2"
             shift 2
             ;;
+        --stats-file)
+            STATS_FILE="$2"
+            shift 2
+            ;;
+        --stats-stage)
+            STATS_STAGE="$2"
+            shift 2
+            ;;
+        --stats-context)
+            STATS_CONTEXT="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1" >&2
             echo "Use --help for usage information" >&2
@@ -371,10 +386,33 @@ call_claude() {
             cmd_args+=(--permission-mode bypassPermissions)
         fi
 
-        if [[ -n "$OUTPUT_FILE" ]]; then
-            claude "${cmd_args[@]}" "$PROMPT" > "$OUTPUT_FILE" 2>&1
+        if [[ -n "$STATS_FILE" ]]; then
+            # Stats tracking: use JSON output and extract text/stats
+            cmd_args+=(--output-format json)
+            local extract_script="$SCRIPT_DIR/utils/extract_llm_stats.py"
+
+            if [[ -n "$OUTPUT_FILE" ]]; then
+                claude "${cmd_args[@]}" "$PROMPT" 2>/dev/null | \
+                    python3 "$extract_script" --provider claude \
+                        --stats-file "$STATS_FILE" \
+                        --stats-stage "$STATS_STAGE" \
+                        --stats-context "$STATS_CONTEXT" \
+                        --model "$MODEL" > "$OUTPUT_FILE"
+            else
+                claude "${cmd_args[@]}" "$PROMPT" 2>/dev/null | \
+                    python3 "$extract_script" --provider claude \
+                        --stats-file "$STATS_FILE" \
+                        --stats-stage "$STATS_STAGE" \
+                        --stats-context "$STATS_CONTEXT" \
+                        --model "$MODEL"
+            fi
         else
-            claude "${cmd_args[@]}" "$PROMPT"
+            # No stats tracking: plain text output
+            if [[ -n "$OUTPUT_FILE" ]]; then
+                claude "${cmd_args[@]}" "$PROMPT" > "$OUTPUT_FILE" 2>&1
+            else
+                claude "${cmd_args[@]}" "$PROMPT"
+            fi
         fi
     fi
 }
@@ -416,19 +454,39 @@ call_gemini() {
         fi
     else
         # Headless mode: use -p flag (or positional with --yolo)
+        local prompt_args=()
         if [[ "$AUTO_APPROVE" == true ]]; then
-            # With --yolo, can use positional prompt
+            prompt_args=("$PROMPT")
+        else
+            prompt_args=(-p "$PROMPT")
+        fi
+
+        if [[ -n "$STATS_FILE" ]]; then
+            # Stats tracking: use JSON output and extract text/stats
+            cmd_args+=(--output-format json)
+            local extract_script="$SCRIPT_DIR/utils/extract_llm_stats.py"
+
             if [[ -n "$OUTPUT_FILE" ]]; then
-                gemini "${cmd_args[@]}" "$PROMPT" > "$OUTPUT_FILE" 2>&1
+                gemini "${cmd_args[@]}" "${prompt_args[@]}" 2>/dev/null | \
+                    python3 "$extract_script" --provider gemini \
+                        --stats-file "$STATS_FILE" \
+                        --stats-stage "$STATS_STAGE" \
+                        --stats-context "$STATS_CONTEXT" \
+                        --model "$MODEL" > "$OUTPUT_FILE"
             else
-                gemini "${cmd_args[@]}" "$PROMPT"
+                gemini "${cmd_args[@]}" "${prompt_args[@]}" 2>/dev/null | \
+                    python3 "$extract_script" --provider gemini \
+                        --stats-file "$STATS_FILE" \
+                        --stats-stage "$STATS_STAGE" \
+                        --stats-context "$STATS_CONTEXT" \
+                        --model "$MODEL"
             fi
         else
-            # Without --yolo, use -p for headless
+            # No stats tracking: plain text output
             if [[ -n "$OUTPUT_FILE" ]]; then
-                gemini "${cmd_args[@]}" -p "$PROMPT" > "$OUTPUT_FILE" 2>&1
+                gemini "${cmd_args[@]}" "${prompt_args[@]}" > "$OUTPUT_FILE" 2>&1
             else
-                gemini "${cmd_args[@]}" -p "$PROMPT"
+                gemini "${cmd_args[@]}" "${prompt_args[@]}"
             fi
         fi
     fi
@@ -479,11 +537,34 @@ call_codex() {
             cmd_args+=(--sandbox workspace-write)
         fi
 
-        if [[ -n "$OUTPUT_FILE" ]]; then
-            # Codex has -o for output file
-            codex exec "${cmd_args[@]}" -o "$OUTPUT_FILE" "$PROMPT"
+        if [[ -n "$STATS_FILE" ]]; then
+            # Stats tracking: use JSON output and extract text/stats
+            cmd_args+=(--json)
+            local extract_script="$SCRIPT_DIR/utils/extract_llm_stats.py"
+
+            if [[ -n "$OUTPUT_FILE" ]]; then
+                codex exec "${cmd_args[@]}" "$PROMPT" 2>/dev/null | \
+                    python3 "$extract_script" --provider codex \
+                        --stats-file "$STATS_FILE" \
+                        --stats-stage "$STATS_STAGE" \
+                        --stats-context "$STATS_CONTEXT" \
+                        --model "$MODEL" > "$OUTPUT_FILE"
+            else
+                codex exec "${cmd_args[@]}" "$PROMPT" 2>/dev/null | \
+                    python3 "$extract_script" --provider codex \
+                        --stats-file "$STATS_FILE" \
+                        --stats-stage "$STATS_STAGE" \
+                        --stats-context "$STATS_CONTEXT" \
+                        --model "$MODEL"
+            fi
         else
-            codex exec "${cmd_args[@]}" "$PROMPT"
+            # No stats tracking: plain text output
+            if [[ -n "$OUTPUT_FILE" ]]; then
+                # Codex has -o for output file
+                codex exec "${cmd_args[@]}" -o "$OUTPUT_FILE" "$PROMPT"
+            else
+                codex exec "${cmd_args[@]}" "$PROMPT"
+            fi
         fi
     fi
 }
