@@ -153,6 +153,59 @@ fi
 # Parse configuration from overview.md
 eval "$("$SRC_DIR/utils/config_parser.py" "$OVERVIEW_FILE" --bash)"
 
+# Models config for provider resolution
+MODELS_CONFIG="$SCRIPT_DIR/configs/models.yaml"
+
+# Resolve provider from model name
+resolve_provider_from_model() {
+    local model_name="$1"
+    if [[ -f "$MODELS_CONFIG" ]]; then
+        local provider
+        provider=$(grep -E "^[[:space:]]*${model_name}:" "$MODELS_CONFIG" 2>/dev/null | \
+                   sed 's/.*:[[:space:]]*//' | tr -d '"' | tr -d "'" || true)
+        if [[ -n "$provider" ]]; then
+            echo "$provider"
+            return 0
+        fi
+    fi
+    case "$model_name" in
+        claude-*|claude[0-9]*) echo "claude" ;;
+        gemini-*|gemini[0-9]*) echo "gemini" ;;
+        gpt-*|o1*|o3*) echo "codex" ;;
+        *) return 1 ;;
+    esac
+}
+
+show_available_models() {
+    echo "Available models (from configs/models.yaml):"
+    if [[ ! -f "$MODELS_CONFIG" ]]; then
+        echo "  (models.yaml not found)"
+        return
+    fi
+    local in_models=false claude_models="" gemini_models="" codex_models=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^models: ]]; then
+            in_models=true
+        elif [[ "$in_models" == true && "$line" =~ ^[a-z]+: && ! "$line" =~ ^[[:space:]] ]]; then
+            break
+        elif [[ "$in_models" == true && "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
+            local model_name="${BASH_REMATCH[1]}" provider="${BASH_REMATCH[2]}"
+            model_name=$(echo "$model_name" | tr -d '"' | tr -d "'" | xargs)
+            provider=$(echo "$provider" | tr -d '"' | tr -d "'" | xargs)
+            case "$provider" in
+                claude) claude_models="${claude_models:+$claude_models, }$model_name" ;;
+                gemini) gemini_models="${gemini_models:+$gemini_models, }$model_name" ;;
+                codex) codex_models="${codex_models:+$codex_models, }$model_name" ;;
+            esac
+        fi
+    done < "$MODELS_CONFIG"
+    echo "  claude: ${claude_models:-(none configured)}"
+    echo "  gemini: ${gemini_models:-(none configured)}"
+    echo "  codex:  ${codex_models:-(none configured)}"
+    echo ""
+    echo "To add a new model, update configs/models.yaml"
+}
+
 # Apply command-line overrides
 if [[ -n "$PROVIDER_OVERRIDE" ]]; then
     DEFAULT_PROVIDER="$PROVIDER_OVERRIDE"
@@ -166,6 +219,23 @@ if [[ -n "$MODEL_OVERRIDE" ]]; then
     unset STAGE_MODEL_NORMALIZER
     unset STAGE_MODEL_UNIFIER
     unset STAGE_MODEL_AGGREGATOR
+fi
+
+# Resolve provider from model if not set (priority: CLI > overview.md > project default)
+if [[ -z "$DEFAULT_PROVIDER" && -n "$DEFAULT_MODEL" ]]; then
+    DEFAULT_PROVIDER=$(resolve_provider_from_model "$DEFAULT_MODEL")
+    if [[ -z "$DEFAULT_PROVIDER" ]]; then
+        log_error "Unknown model '$DEFAULT_MODEL'"
+        echo ""
+        show_available_models
+        exit 1
+    fi
+fi
+
+# Validate we have a provider
+if [[ -z "$DEFAULT_PROVIDER" ]]; then
+    log_error "No provider configured. Specify --provider or --model, or set default_provider in overview.md"
+    exit 1
 fi
 
 log_info "Configuration:"

@@ -12,35 +12,9 @@ import os
 import sys
 from pathlib import Path
 
-import yaml
-
-
-def resolve_provider_from_model(model_name: str) -> str | None:
-    """Resolve provider from model name using configs/models.yaml."""
-    # Find the project root (where configs/ lives)
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent.parent
-    models_config = project_root / 'configs' / 'models.yaml'
-
-    if models_config.exists():
-        try:
-            with open(models_config, 'r') as f:
-                config = yaml.safe_load(f)
-            models = config.get('models', {})
-            if model_name in models:
-                return models[model_name]
-        except Exception:
-            pass  # Fall back to prefix matching
-
-    # Fallback: infer from model name prefix
-    if model_name.startswith('claude'):
-        return 'claude'
-    elif model_name.startswith('gemini'):
-        return 'gemini'
-    elif model_name.startswith('gpt-') or model_name.startswith('o1') or model_name.startswith('o3'):
-        return 'codex'
-
-    return None
+# Add src/utils to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
+from system_config import resolve_provider_from_model, format_available_models
 
 
 def read_csv_content(csv_path: str, max_lines: int = None) -> str:
@@ -361,8 +335,9 @@ def main():
     if not provider and model:
         provider = resolve_provider_from_model(model)
         if not provider:
-            print(f"Error: Could not determine provider for model '{model}'")
-            print("Either add it to configs/models.yaml or specify --provider explicitly")
+            print(f"Error: Unknown model '{model}'")
+            print("")
+            print(format_available_models())
             return 1
 
     if not provider and not model:

@@ -143,6 +143,56 @@ get_default_model_for_provider() {
 }
 
 # ============================================================================
+# Show available models from models.yaml
+# ============================================================================
+show_available_models() {
+    echo "Available models (from configs/models.yaml):" >&2
+
+    if [[ ! -f "$MODELS_CONFIG" ]]; then
+        echo "  (models.yaml not found)" >&2
+        return
+    fi
+
+    local in_models=false
+    local claude_models=""
+    local gemini_models=""
+    local codex_models=""
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^models: ]]; then
+            in_models=true
+        elif [[ "$in_models" == true && "$line" =~ ^[a-z]+: && ! "$line" =~ ^[[:space:]] ]]; then
+            # New top-level section, stop
+            break
+        elif [[ "$in_models" == true && "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
+            local model_name="${BASH_REMATCH[1]}"
+            local provider="${BASH_REMATCH[2]}"
+            # Clean up whitespace and quotes
+            model_name=$(echo "$model_name" | tr -d '"' | tr -d "'" | xargs)
+            provider=$(echo "$provider" | tr -d '"' | tr -d "'" | xargs)
+
+            case "$provider" in
+                claude)
+                    claude_models="${claude_models:+$claude_models, }$model_name"
+                    ;;
+                gemini)
+                    gemini_models="${gemini_models:+$gemini_models, }$model_name"
+                    ;;
+                codex)
+                    codex_models="${codex_models:+$codex_models, }$model_name"
+                    ;;
+            esac
+        fi
+    done < "$MODELS_CONFIG"
+
+    echo "  claude: ${claude_models:-(none configured)}" >&2
+    echo "  gemini: ${gemini_models:-(none configured)}" >&2
+    echo "  codex:  ${codex_models:-(none configured)}" >&2
+    echo "" >&2
+    echo "To add a new model, update configs/models.yaml" >&2
+}
+
+# ============================================================================
 # Config file parsing (simple YAML - supports basic key: value)
 # ============================================================================
 parse_config() {
@@ -269,8 +319,9 @@ fi
 if [[ -z "$PROVIDER" && -n "$MODEL" ]]; then
     PROVIDER=$(resolve_provider_from_model "$MODEL")
     if [[ -z "$PROVIDER" ]]; then
-        echo "Error: Could not determine provider for model '$MODEL'" >&2
-        echo "Either add it to configs/models.yaml or specify --provider explicitly" >&2
+        echo "Error: Unknown model '$MODEL'" >&2
+        echo "" >&2
+        show_available_models
         exit 1
     fi
 fi
