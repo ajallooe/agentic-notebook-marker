@@ -449,6 +449,11 @@ fi
 log_info "Stage 3: Running Marker Agents (Parallel)..."
 log_info "This will process $NUM_STUDENTS students"
 
+# Clean up stale marker logs from previous runs to prevent false error detection
+if [[ -d "$LOGS_DIR/marker_logs" ]]; then
+    rm -rf "$LOGS_DIR/marker_logs"
+fi
+
 # Create task list for parallel execution
 MARKER_TASKS="$PROCESSED_DIR/marker_tasks.txt"
 > "$MARKER_TASKS"
@@ -504,15 +509,14 @@ else
     log_success "Marker agents completed"
 fi
 
-# Check for failed marker tasks and handle with --force-complete
-FAILED_MARKERS=0
-if [[ -d "$LOGS_DIR/marker_logs" ]]; then
-    # Count stderr files with content (indicating failures)
-    FAILED_MARKERS=$(find "$LOGS_DIR/marker_logs" -name "stderr" -type f -size +0 2>/dev/null | wc -l | tr -d ' ')
-fi
+# Check for missing marker outputs (more reliable than checking stderr files which may be stale)
+MISSING_MARKINGS=0
+TOTAL_STUDENTS=$(jq -r '.submissions | length' "$SUBMISSIONS_MANIFEST")
+EXISTING_MARKINGS=$(find "$MARKINGS_DIR" -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
+MISSING_MARKINGS=$((TOTAL_STUDENTS - EXISTING_MARKINGS))
 
-if [[ $FAILED_MARKERS -gt 0 ]]; then
-    log_warning "Found $FAILED_MARKERS failed marker task(s)"
+if [[ $MISSING_MARKINGS -gt 0 ]]; then
+    log_warning "Found $MISSING_MARKINGS missing marking file(s) out of $TOTAL_STUDENTS students"
 
     if [[ "$FORCE_COMPLETE" == true ]]; then
         log_info "Creating placeholder markings for failed tasks (--force-complete)..."
