@@ -262,7 +262,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Resolve provider from model if not explicitly set
-if [[ -z "$PROVIDER" && -n "$MODEL" ]]; then
+# Priority: --api-model (for headless workflows), then --model
+if [[ -z "$PROVIDER" && -n "$API_MODEL" ]]; then
+    # When --api-model is specified, resolve provider from it
+    PROVIDER=$(resolve_provider_from_model "$API_MODEL" || true)
+    if [[ -z "$PROVIDER" ]]; then
+        log_error "Unknown API model '$API_MODEL'"
+        echo ""
+        show_available_models
+        exit 1
+    fi
+elif [[ -z "$PROVIDER" && -n "$MODEL" ]]; then
     PROVIDER=$(resolve_provider_from_model "$MODEL" || true)
     if [[ -z "$PROVIDER" ]]; then
         log_error "Unknown model '$MODEL'"
