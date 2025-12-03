@@ -700,6 +700,10 @@ else
     if [[ $RESUME == true ]]; then
         UNIFIER_SKIPPED=$((NUM_STUDENTS - UNIFIER_TASKS_TO_RUN))
         log_info "Generated $UNIFIER_TASKS_TO_RUN unifier tasks (skipped $UNIFIER_SKIPPED already completed)"
+
+        # Clear unifier_logs to avoid counting old stdout files in progress calculation
+        rm -rf "$LOGS_DIR/unifier_logs"
+        mkdir -p "$LOGS_DIR/unifier_logs"
     else
         log_info "Generated $UNIFIER_TASKS_TO_RUN unifier tasks"
     fi
