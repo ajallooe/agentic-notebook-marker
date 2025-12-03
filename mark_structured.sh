@@ -803,8 +803,8 @@ if [[ $FEEDBACK_COUNT -lt $NUM_STUDENTS ]]; then
             --type structured
 
         if [[ $? -ne 0 ]]; then
-            log_error "Force complete failed"
-            exit 1
+            log_error "Force complete script failed"
+            log_warning "Continuing anyway (some feedback files may be missing)"
         fi
 
         log_success "Zero-mark feedback generated for $MISSING_COUNT student(s)"
@@ -844,7 +844,11 @@ if [[ "$GROUP_ASSIGNMENT" == "true" ]]; then
 
         if [[ $? -ne 0 ]]; then
             log_error "Group feedback duplication failed"
-            exit 1
+            if [[ "$FORCE_COMPLETE" == true ]]; then
+                log_warning "Continuing despite failure (--force-complete)"
+            else
+                exit 1
+            fi
         fi
 
         log_success "Group feedback duplicated for individual students"
@@ -876,10 +880,14 @@ else
 
     if [[ $? -ne 0 ]]; then
         log_error "Grade aggregation failed"
-        exit 1
+        if [[ "$FORCE_COMPLETE" == true ]]; then
+            log_warning "Continuing despite aggregation failure (--force-complete)"
+        else
+            exit 1
+        fi
+    else
+        log_success "Aggregation complete"
     fi
-
-    log_success "Aggregation complete"
 fi
 
 # Stop if requested
