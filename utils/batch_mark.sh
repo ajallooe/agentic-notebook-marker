@@ -559,7 +559,7 @@ if [[ "$START_ROUND" -le 1 ]]; then
     log_info "Running submission discovery and activity extraction..."
     echo
 
-    run_stage_for_all 2 "1-2 (Preparation)"
+    run_stage_for_all 2 "1-2 (Preparation)" || true
 
     echo
     echo "=================================================================="
@@ -582,7 +582,7 @@ if [[ "$START_ROUND" -le 2 ]]; then
     log_info "The pattern designer will run for each assignment in sequence."
     echo
 
-    run_stage_for_all 3 "3 (Pattern Design)"
+    run_stage_for_all 3 "3 (Pattern Design)" || true
 
     echo
     echo "=================================================================="
@@ -605,7 +605,7 @@ if [[ "$START_ROUND" -le 3 ]]; then
     log_info "This may take a while depending on the number of submissions."
     echo
 
-    run_stage_for_all 5 "4-5 (Marking + Normalization)"
+    run_stage_for_all 5 "4-5 (Marking + Normalization)" || true
 
     echo
     echo "=================================================================="
@@ -627,7 +627,7 @@ if [[ "$START_ROUND" -le 4 ]]; then
     log_info "Creating adjustment dashboards..."
     echo
 
-    run_stage_for_all 6 "6 (Dashboard Creation)"
+    run_stage_for_all 6 "6 (Dashboard Creation)" || true
 
     echo
     echo "=================================================================="
