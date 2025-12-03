@@ -50,6 +50,20 @@ def strip_bom(s: str) -> str:
     return s.lstrip('\ufeff')
 
 
+def normalize_name(name: str) -> str:
+    """Normalize a name for comparison.
+
+    - Strips BOM
+    - Replaces commas with spaces (LLM sometimes joins First,Last instead of First Last)
+    - Normalizes whitespace
+    - Case-insensitive (lowercased)
+    """
+    name = strip_bom(name)
+    name = name.replace(',', ' ')  # Handle "First,Last" -> "First Last"
+    name = ' '.join(name.split())  # Normalize whitespace
+    return name.lower()
+
+
 def get_student_name_from_row(row: Dict[str, str], student_col: str, fieldnames: List[str]) -> str:
     """Extract student name from a row, handling various column formats.
 
@@ -140,8 +154,9 @@ def apply_gradebook_updates(gradebook_config: Dict[str, Any], grades: Dict[str, 
         if col not in updated_fieldnames:
             updated_fieldnames.append(col)
 
-    # Build student mapping lookup
-    student_mapping = {m['gradebook_name']: m['grades_name']
+    # Build student mapping lookup with normalized names for robust matching
+    # Key: normalized gradebook name, Value: (original gradebook name, grades name)
+    student_mapping = {normalize_name(m['gradebook_name']): m['grades_name']
                       for m in gradebook_config['student_mappings']}
 
     # Apply updates
@@ -151,9 +166,10 @@ def apply_gradebook_updates(gradebook_config: Dict[str, Any], grades: Dict[str, 
 
     for row in rows:
         gradebook_name = get_student_name_from_row(row, student_col, fieldnames)
+        normalized_gradebook_name = normalize_name(gradebook_name)
 
-        if gradebook_name in student_mapping:
-            grades_name = student_mapping[gradebook_name]
+        if normalized_gradebook_name in student_mapping:
+            grades_name = student_mapping[normalized_gradebook_name]
 
             if grades_name in grades:
                 grade_data = grades[grades_name]
