@@ -343,6 +343,37 @@ To use direct API calls instead of CLI tools:
 - Interactive stages always use CLI (needed for terminal interaction)
 - With `--auto-approve`, all stages become headless and use API
 
+### Prompt Caching
+
+The API caller supports prompt caching to reduce costs when the same system prompt is used repeatedly (e.g., same rubric for all students):
+
+```bash
+# With system prompt for caching (used internally by marker agents)
+python3 src/api/caller.py --model claude-sonnet-4-5 \
+    --system-prompt-file processed/rubric.md \
+    --prompt "Grade this student: ..."
+```
+
+**Provider-specific caching:**
+
+| Provider | Type | Min Tokens | TTL | Savings | Notes |
+|----------|------|------------|-----|---------|-------|
+| Claude | Explicit | 1,024 | 5 min | 90% reads | Uses `cache_control` markers |
+| Gemini 2.5 | Implicit | 1,024-4,096 | 60 min | 90% hits | Automatic, no code changes |
+| OpenAI | Automatic | 1,024 | 5-10 min | 50% | Automatic, no code changes |
+
+**Best practices:**
+- Put static content (rubric, criteria) in `--system-prompt`
+- Put variable content (student work) in `--prompt`
+- System prompts should be >1024 tokens for caching benefit
+- Caches auto-expire; no manual clearing typically needed
+
+**Clear caches** (if process interrupted):
+```bash
+./utils/clear_caches.sh           # List cache status
+./utils/clear_caches.sh --delete  # Delete explicit Gemini caches
+```
+
 ### `utils/load_api_keys.sh`
 
 Load API keys from `.secrets/` into environment variables:
@@ -557,6 +588,23 @@ Remove LLM generation artifacts (like "YOLO mode is enabled...") from files:
 ```
 
 Artifacts are defined in a JSONL file with `{"artifact": "text to remove"}` entries.
+
+### `utils/clear_caches.sh`
+
+Clear any explicit API caches that may be accumulating costs (use after interrupted processes):
+
+```bash
+# List cache status for all providers
+./utils/clear_caches.sh
+
+# Delete all explicit Gemini caches
+./utils/clear_caches.sh --delete
+
+# Preview what would be deleted
+./utils/clear_caches.sh --dry-run
+```
+
+**Note**: Claude and OpenAI caches auto-expire (5-10 min). Only Gemini explicit caches need manual deletion, but this system uses implicit caching which is managed automatically by Google.
 
 ## Error Handling and Recovery
 

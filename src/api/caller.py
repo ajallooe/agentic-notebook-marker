@@ -15,6 +15,18 @@ Usage:
   python3 caller.py --model claude-sonnet-4 --prompt "Hello"
   python3 caller.py --model gemini-2.5-pro --prompt-file prompt.txt
 
+Prompt Caching:
+  For repeated prompts with shared prefixes (e.g., same rubric, different students),
+  use --system-prompt to provide the cacheable static content:
+
+  python3 caller.py --model claude-sonnet-4-5 \\
+      --system-prompt "You are a grading assistant..." \\
+      --prompt "Grade this student: ..."
+
+  Claude: Uses explicit cache_control markers (min 1024 tokens, 5 min TTL)
+  Gemini 2.5: Implicit caching automatic (min 1024-4096 tokens, 60 min TTL)
+  OpenAI: Automatic caching (min 1024 tokens, 5-10 min TTL)
+
 Output:
   - Response text to stdout
   - Stats appended to --stats-file if provided (JSONL format)
@@ -59,8 +71,22 @@ def resolve_provider(model: str, models_config: Path) -> str | None:
     return None
 
 
-def call_anthropic(model: str, prompt: str, max_tokens: int = 8192) -> tuple[str, dict]:
-    """Call Anthropic/Claude API."""
+def call_anthropic(model: str, prompt: str, max_tokens: int = 8192,
+                   system_prompt: str | None = None) -> tuple[str, dict]:
+    """Call Anthropic/Claude API with optional prompt caching.
+
+    Args:
+        model: Model name (e.g., claude-sonnet-4-5)
+        prompt: User prompt (variable content)
+        max_tokens: Maximum output tokens
+        system_prompt: Optional system prompt to cache (static content, min 1024 tokens)
+
+    Claude prompt caching:
+        - System prompt is marked with cache_control for automatic caching
+        - Cached content expires after 5 minutes (default TTL)
+        - Minimum 1024 tokens required for caching
+        - Cache writes cost +25%, cache reads cost only 10% of base price
+    """
     try:
         import anthropic
     except ImportError:
@@ -75,13 +101,28 @@ def call_anthropic(model: str, prompt: str, max_tokens: int = 8192) -> tuple[str
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[
+    # Build request with optional caching
+    request_kwargs = {
+        'model': model,
+        'max_tokens': max_tokens,
+        'messages': [
             {"role": "user", "content": prompt}
         ]
-    )
+    }
+
+    # Add system prompt with cache_control if provided
+    if system_prompt:
+        # Use cache_control to enable prompt caching
+        # The "ephemeral" type uses default 5-minute TTL
+        request_kwargs['system'] = [
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"}
+            }
+        ]
+
+    response = client.messages.create(**request_kwargs)
 
     # Extract text from response
     text = ""
@@ -89,7 +130,7 @@ def call_anthropic(model: str, prompt: str, max_tokens: int = 8192) -> tuple[str
         if block.type == "text":
             text += block.text
 
-    # Extract usage stats
+    # Extract usage stats including cache info
     stats = {
         'input_tokens': response.usage.input_tokens,
         'output_tokens': response.usage.output_tokens,
@@ -101,8 +142,20 @@ def call_anthropic(model: str, prompt: str, max_tokens: int = 8192) -> tuple[str
     return text, stats
 
 
-def call_google(model: str, prompt: str) -> tuple[str, dict]:
-    """Call Google Generative AI API."""
+def call_google(model: str, prompt: str, system_prompt: str | None = None) -> tuple[str, dict]:
+    """Call Google Generative AI API with optional system instruction.
+
+    Args:
+        model: Model name (e.g., gemini-2.5-pro)
+        prompt: User prompt (variable content)
+        system_prompt: Optional system instruction (for Gemini's implicit caching)
+
+    Gemini caching (2.5 models):
+        - Implicit caching is automatic (no API changes needed)
+        - System instructions at start of prompt help cache hit rate
+        - Min tokens: 1024 (Flash), 4096 (Pro)
+        - 90% discount on cache hits
+    """
     try:
         import google.generativeai as genai
     except ImportError:
@@ -116,19 +169,27 @@ def call_google(model: str, prompt: str) -> tuple[str, dict]:
 
     genai.configure(api_key=api_key)
 
-    gen_model = genai.GenerativeModel(model)
+    # Create model with system instruction if provided
+    # This helps with implicit caching - static content goes in system_instruction
+    if system_prompt:
+        gen_model = genai.GenerativeModel(model, system_instruction=system_prompt)
+    else:
+        gen_model = genai.GenerativeModel(model)
+
     response = gen_model.generate_content(prompt)
 
     text = response.text
 
-    # Extract usage stats if available
+    # Extract usage stats including cache info (Gemini 2.5 reports cached_content_token_count)
     usage_metadata = getattr(response, 'usage_metadata', None)
     if usage_metadata:
+        # Gemini reports cached tokens when implicit caching hits
+        cached_tokens = getattr(usage_metadata, 'cached_content_token_count', 0) or 0
         stats = {
             'input_tokens': getattr(usage_metadata, 'prompt_token_count', 0) or 0,
             'output_tokens': getattr(usage_metadata, 'candidates_token_count', 0) or 0,
-            'cache_creation_tokens': 0,
-            'cache_read_tokens': 0,
+            'cache_creation_tokens': 0,  # Gemini doesn't differentiate creation vs read
+            'cache_read_tokens': cached_tokens,
             'cost_usd': 0,
         }
     else:
@@ -143,8 +204,20 @@ def call_google(model: str, prompt: str) -> tuple[str, dict]:
     return text, stats
 
 
-def call_openai(model: str, prompt: str) -> tuple[str, dict]:
-    """Call OpenAI API."""
+def call_openai(model: str, prompt: str, system_prompt: str | None = None) -> tuple[str, dict]:
+    """Call OpenAI API with optional system message.
+
+    Args:
+        model: Model name (e.g., gpt-5.1)
+        prompt: User prompt (variable content)
+        system_prompt: Optional system message (helps with automatic caching)
+
+    OpenAI caching:
+        - Automatic for prompts > 1024 tokens
+        - System message at start helps cache hit rate
+        - 50% discount on cached input tokens
+        - Cache cleared after 5-10 min inactivity
+    """
     try:
         import openai
     except ImportError:
@@ -158,24 +231,43 @@ def call_openai(model: str, prompt: str) -> tuple[str, dict]:
 
     client = openai.OpenAI(api_key=api_key)
 
+    # Build messages with optional system prompt
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
     response = client.chat.completions.create(
         model=model,
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
+        messages=messages
     )
 
     text = response.choices[0].message.content or ""
 
-    # Extract usage stats
+    # Extract usage stats including cache info
     usage = response.usage
-    stats = {
-        'input_tokens': usage.prompt_tokens if usage else 0,
-        'output_tokens': usage.completion_tokens if usage else 0,
-        'cache_creation_tokens': 0,
-        'cache_read_tokens': 0,
-        'cost_usd': 0,
-    }
+    if usage:
+        # OpenAI reports cached tokens in prompt_tokens_details
+        prompt_details = getattr(usage, 'prompt_tokens_details', None)
+        cached_tokens = 0
+        if prompt_details:
+            cached_tokens = getattr(prompt_details, 'cached_tokens', 0) or 0
+
+        stats = {
+            'input_tokens': usage.prompt_tokens,
+            'output_tokens': usage.completion_tokens,
+            'cache_creation_tokens': 0,  # OpenAI doesn't differentiate
+            'cache_read_tokens': cached_tokens,
+            'cost_usd': 0,
+        }
+    else:
+        stats = {
+            'input_tokens': 0,
+            'output_tokens': 0,
+            'cache_creation_tokens': 0,
+            'cache_read_tokens': 0,
+            'cost_usd': 0,
+        }
 
     return text, stats
 
@@ -185,6 +277,8 @@ def main():
     parser.add_argument('--model', required=True, help='Model name (provider auto-resolved)')
     parser.add_argument('--prompt', help='Prompt text')
     parser.add_argument('--prompt-file', help='Read prompt from file')
+    parser.add_argument('--system-prompt', help='System prompt (cacheable static content)')
+    parser.add_argument('--system-prompt-file', help='Read system prompt from file')
     parser.add_argument('--provider', help='Override provider (claude, gemini, openai)')
     parser.add_argument('--stats-file', help='Append stats to this file (JSONL)')
     parser.add_argument('--stats-stage', default='unknown', help='Stage name for stats')
@@ -201,6 +295,14 @@ def main():
     else:
         print("Error: --prompt or --prompt-file required", file=sys.stderr)
         sys.exit(1)
+
+    # Get system prompt (for caching)
+    system_prompt = None
+    if args.system_prompt_file:
+        with open(args.system_prompt_file, 'r') as f:
+            system_prompt = f.read()
+    elif args.system_prompt:
+        system_prompt = args.system_prompt
 
     # Resolve provider
     if args.provider:
@@ -224,14 +326,14 @@ def main():
     elif provider in ('openai', 'codex'):
         provider = 'openai'
 
-    # Call appropriate API
+    # Call appropriate API with system prompt for caching
     try:
         if provider == 'claude':
-            text, stats = call_anthropic(args.model, prompt, args.max_tokens)
+            text, stats = call_anthropic(args.model, prompt, args.max_tokens, system_prompt)
         elif provider == 'gemini':
-            text, stats = call_google(args.model, prompt)
+            text, stats = call_google(args.model, prompt, system_prompt)
         elif provider == 'openai':
-            text, stats = call_openai(args.model, prompt)
+            text, stats = call_openai(args.model, prompt, system_prompt)
         else:
             print(f"Error: Unknown provider '{provider}'", file=sys.stderr)
             sys.exit(1)

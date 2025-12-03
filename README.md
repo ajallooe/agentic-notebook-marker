@@ -817,6 +817,27 @@ source utils/load_api_keys.sh
 ./utils/batch_mark.sh assignments.txt --api-model gemini-2.5-pro --auto-approve
 ```
 
+### Prompt Caching (Cost Savings)
+
+API mode supports prompt caching to reduce costs when marking many students with the same rubric/criteria:
+
+| Provider | Caching Type | Min Tokens | TTL | Savings |
+|----------|--------------|------------|-----|---------|
+| Claude | Explicit | 1,024 | 5 min | 90% on reads |
+| Gemini 2.5 | Implicit (auto) | 1,024-4,096 | 60 min | 90% on hits |
+| OpenAI | Automatic | 1,024 | 5-10 min | 50% on cached |
+
+**How it works:**
+- System prompts (rubric, criteria) are cached automatically
+- Student-specific content is sent fresh with each request
+- Caches expire automatically; no manual management needed
+
+**If process is interrupted:**
+```bash
+./utils/clear_caches.sh           # Check cache status
+./utils/clear_caches.sh --delete  # Delete explicit Gemini caches (if any)
+```
+
 ### Available Providers and Models
 
 #### Claude Code Provider
