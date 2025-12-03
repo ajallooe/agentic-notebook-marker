@@ -77,6 +77,10 @@ while [[ $# -gt 0 ]]; do
             MODEL="$2"
             shift 2
             ;;
+        --api-model)
+            API_MODEL="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1" >&2
             echo "Usage: $0 --assignment-dir <dir> --gradebooks <csv1> <csv2> ... [OPTIONS]" >&2
@@ -99,6 +103,7 @@ Options:
   --skip-mapping                 Skip mapping creation, use existing mapping file
   --provider <provider>          LLM provider (claude, gemini, codex)
   --model <model>                Specific model to use
+  --api-model <model>            Model for direct API calls (headless mode)
 
 Example:
   $0 --assignment-dir "assignments/Lab 02" \\
@@ -270,7 +275,8 @@ else
         "${GRADEBOOK_ARGS[@]}" \
         --output-path "$TRANSLATION_DIR" \
         ${PROVIDER:+--provider "$PROVIDER"} \
-        ${MODEL:+--model "$MODEL"}
+        ${MODEL:+--model "$MODEL"} \
+        ${API_MODEL:+--api-model "$API_MODEL"}
 
     if [[ $? -ne 0 ]]; then
         log_error "Translation mapping failed"
