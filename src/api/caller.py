@@ -29,27 +29,32 @@ from pathlib import Path
 
 
 def resolve_provider(model: str, models_config: Path) -> str | None:
-    """Resolve provider from model name using models.yaml."""
+    """Resolve provider from model name using models.yaml.
+
+    Checks both api_models and cli_models sections.
+    """
     if not models_config.exists():
         return None
 
     with open(models_config, 'r') as f:
         content = f.read()
 
-    # Simple YAML parsing for model: provider lines
-    in_models = False
-    for line in content.split('\n'):
-        if line.strip() == 'models:':
-            in_models = True
-            continue
-        if in_models:
-            if line and not line.startswith(' '):
-                break  # New top-level section
-            if model + ':' in line:
-                # Extract provider
-                parts = line.split(':')
-                if len(parts) >= 2:
-                    return parts[-1].strip().strip('"').strip("'")
+    # Simple YAML parsing - check both api_models and cli_models sections
+    for section in ['api_models', 'cli_models']:
+        in_section = False
+        for line in content.split('\n'):
+            if line.strip() == f'{section}:':
+                in_section = True
+                continue
+            if in_section:
+                if line and not line.startswith(' ') and not line.startswith('#'):
+                    in_section = False  # New top-level section
+                    continue
+                if model + ':' in line:
+                    # Extract provider
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        return parts[-1].strip().strip('"').strip("'")
 
     return None
 
