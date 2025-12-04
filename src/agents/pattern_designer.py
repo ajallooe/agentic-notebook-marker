@@ -167,12 +167,13 @@ The marker agents will receive each group's specific problem description along w
         with open(prompt_debug_file, 'w') as f:
             f.write(prompt)
 
-        # Determine mode based on auto-approve flag
-        mode = "headless" if args.auto_approve else "interactive"
+        # Pattern designer always uses interactive mode because it needs Write tools
+        # to create rubric and criteria files. Auto-approve just skips permission prompts.
+        mode = "interactive"
 
         print("="*70)
         if args.auto_approve:
-            print("PATTERN DESIGNER - AUTO-APPROVE MODE (Headless)")
+            print("PATTERN DESIGNER - AUTO-APPROVE MODE")
         else:
             print("PATTERN DESIGNER - INTERACTIVE SESSION")
         print("="*70)
@@ -207,16 +208,16 @@ The marker agents will receive each group's specific problem description along w
         if args.model:
             cmd.extend(["--model", args.model])
 
-        # Only pass --api-model for headless mode (auto-approve)
-        if args.api_model and args.auto_approve:
-            cmd.extend(["--api-model", args.api_model])
+        # NOTE: Pattern designer does NOT use --api-model even if provided.
+        # The API caller is text-only and cannot create files.
+        # Pattern designer needs CLI tools (Write) to create rubric and criteria files.
 
-        # For interactive mode, inherit stdin/stdout/stderr to preserve TTY
-        # For headless mode, just capture output
+        # Pass --auto-approve to CLI for non-interactive permission handling
         if args.auto_approve:
-            result = subprocess.run(cmd, capture_output=False)
-        else:
-            result = subprocess.run(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+            cmd.extend(["--auto-approve"])
+
+        # Always use interactive TTY (pattern designer needs Write tools)
+        result = subprocess.run(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
 
         if result.returncode != 0:
             print(f"\n✗ Pattern design session ended with errors", file=sys.stderr)
