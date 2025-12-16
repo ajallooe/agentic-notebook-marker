@@ -306,6 +306,7 @@ fi
 # Setup directories
 PROCESSED_DIR="$ASSIGNMENT_DIR/processed"
 SUBMISSIONS_DIR="$ASSIGNMENT_DIR/submissions"
+GRADEBOOKS_DIR="$ASSIGNMENT_DIR/gradebooks"
 ACTIVITIES_DIR="$PROCESSED_DIR/activities"
 MARKINGS_DIR="$PROCESSED_DIR/markings"
 NORMALIZED_DIR="$PROCESSED_DIR/normalized"
@@ -497,6 +498,57 @@ if [[ ! -f "$PROCESSED_DIR/rubric.md" ]]; then
 fi
 
 # ============================================================================
+# STAGE 3.5: Name Resolver Agent (LLM-based name extraction)
+# ============================================================================
+
+NAME_MAPPING_FILE="$PROCESSED_DIR/name_mapping.json"
+
+if [[ $RESUME == true && -f "$NAME_MAPPING_FILE" ]]; then
+    log_info "Stage 3.5: Skipping (name mapping already exists)"
+else
+    log_info "Stage 3.5: Running Name Resolver Agent..."
+    log_info "Extracting student names from submission paths using LLM..."
+
+    # Build gradebook arguments if gradebooks directory exists
+    GRADEBOOK_ARGS=()
+    if [[ -d "$GRADEBOOKS_DIR" ]]; then
+        for gradebook in "$GRADEBOOKS_DIR"/*.csv; do
+            if [[ -f "$gradebook" && ! "$gradebook" == *"_filled"* && ! "$gradebook" == *"_summarized"* ]]; then
+                GRADEBOOK_ARGS+=(--gradebooks "$gradebook")
+            fi
+        done
+    fi
+
+    # Build name resolver command
+    NAME_RESOLVER_CMD=(python3 "$SRC_DIR/agents/name_resolver.py"
+        --assignment-dir "$ASSIGNMENT_DIR"
+        --output "$NAME_MAPPING_FILE"
+        --provider "$DEFAULT_PROVIDER")
+
+    if [[ -n "$MODEL_PATTERN_DESIGNER" ]]; then
+        NAME_RESOLVER_CMD+=(--model "$MODEL_PATTERN_DESIGNER")
+    fi
+
+    if [[ -n "$API_MODEL" ]]; then
+        NAME_RESOLVER_CMD+=(--api-model "$API_MODEL")
+    fi
+
+    if [[ ${#GRADEBOOK_ARGS[@]} -gt 0 ]]; then
+        NAME_RESOLVER_CMD+=("${GRADEBOOK_ARGS[@]}")
+    fi
+
+    "${NAME_RESOLVER_CMD[@]}"
+
+    if [[ $? -ne 0 ]]; then
+        log_warning "Name resolver failed - continuing with original names from submissions manifest"
+    elif [[ -f "$NAME_MAPPING_FILE" ]]; then
+        # Verify the mapping was created
+        RESOLVED_COUNT=$(jq -r '.name_mapping | length' "$NAME_MAPPING_FILE" 2>/dev/null || echo "0")
+        log_success "Name resolution complete: $RESOLVED_COUNT names resolved"
+    fi
+fi
+
+# ============================================================================
 # STAGE 4: Marker Agents (Parallel, Headless)
 # ============================================================================
 
@@ -507,18 +559,37 @@ log_info "This will process $NUM_ACTIVITIES activities × $NUM_STUDENTS students
 MARKER_TASKS="$PROCESSED_DIR/marker_tasks.txt"
 > "$MARKER_TASKS"
 
+# Helper function to get canonical name (from name_mapping if available, else original)
+get_canonical_name() {
+    local submission_path="$1"
+    local original_name="$2"
+
+    if [[ -f "$NAME_MAPPING_FILE" ]]; then
+        # Try to find the canonical name in the mapping
+        local canonical
+        canonical=$(jq -r --arg path "$submission_path" '.name_mapping[$path] // empty' "$NAME_MAPPING_FILE" 2>/dev/null)
+        if [[ -n "$canonical" ]]; then
+            echo "$canonical"
+            return
+        fi
+    fi
+    echo "$original_name"
+}
+
 # Generate marker tasks (one per activity per student)
 # In resume mode, skip tasks where output file already exists
 jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | while IFS='|' read -r submission_path student_name; do
+    # Get canonical name from name mapping (if available)
+    canonical_name=$(get_canonical_name "$submission_path" "$student_name")
     for activity in $(seq 1 $NUM_ACTIVITIES); do
-        output_file="$MARKINGS_DIR/${student_name}_A${activity}.md"
+        output_file="$MARKINGS_DIR/${canonical_name}_A${activity}.md"
 
         if [[ $RESUME == true && -f "$output_file" ]]; then
             # Skip this task - output already exists
             :
         else
-            # Add task to list
-            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$student_name' --submission '$submission_path' --output '$output_file' --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$MARKER_TASKS"
+            # Add task to list (use canonical_name for student identification)
+            echo "python3 '$SRC_DIR/agents/marker.py' --activity A$activity --student '$canonical_name' --submission '$submission_path' --output '$output_file' --provider '$DEFAULT_PROVIDER' ${MODEL_MARKER:+--model '$MODEL_MARKER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$MARKER_TASKS"
         fi
     done
 done
@@ -744,14 +815,16 @@ UNIFIER_TASKS="$PROCESSED_DIR/unifier_tasks.txt"
 # Generate unifier tasks (one per student)
 # In resume mode, skip tasks where output file already exists
 jq -r '.submissions[] | .path + "|" + .student_name' "$SUBMISSIONS_MANIFEST" | while IFS='|' read -r submission_path student_name; do
-    output_file="$FINAL_DIR/${student_name}_feedback.md"
+    # Get canonical name from name mapping (if available)
+    canonical_name=$(get_canonical_name "$submission_path" "$student_name")
+    output_file="$FINAL_DIR/${canonical_name}_feedback.md"
 
     if [[ $RESUME == true && -f "$output_file" ]]; then
         # Skip this task - output already exists
         :
     else
-        # Add task to list
-        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$student_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type structured --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
+        # Add task to list (use canonical_name for student identification)
+        echo "python3 '$SRC_DIR/agents/unifier.py' --student '$canonical_name' --submission '$submission_path' --scheme '$APPROVED_SCHEME' --markings-dir '$MARKINGS_DIR' --output '$output_file' --type structured --provider '$DEFAULT_PROVIDER' ${MODEL_UNIFIER:+--model '$MODEL_UNIFIER'} ${API_MODEL:+--api-model '$API_MODEL'} --stats-file '$STATS_FILE'" >> "$UNIFIER_TASKS"
     fi
 done
 
@@ -918,7 +991,6 @@ fi
 # STAGE 9: Gradebook Translation (Optional, Automatic)
 # ============================================================================
 
-GRADEBOOKS_DIR="$ASSIGNMENT_DIR/gradebooks"
 TRANSLATION_DIR="$PROCESSED_DIR/translation"
 TRANSLATION_MAPPING="$TRANSLATION_DIR/translation_mapping.json"
 

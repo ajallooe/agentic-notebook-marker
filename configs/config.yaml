@@ -18,7 +18,7 @@ default_provider: claude
 # Examples by provider:
 #   Claude models: claude-sonnet-4-5, claude-opus-4-5, claude-haiku-4-5
 #   Gemini models: gemini-3-pro-preview, gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite
-#   Codex models: gpt-5.1-codex-max, gpt-5.1-codex-mini, gpt-5.1
+#   Codex models: gpt-5.1-codex-max, gpt-5.1-codex-mini, gpt-5.2, gpt-5.1, gpt-5.1-codex, gpt-5-codex, gpt-5-codex-mini, gpt-5
 default_model:
 
 # Parallel execution settings

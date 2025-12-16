@@ -44,12 +44,17 @@ api_models:
   gemini-2.5-pro: gemini
   gemini-2.5-flash: gemini
   gemini-2.5-flash-lite: gemini
+  gemini-2.0-flash: gemini
+  gemini-2.0-flash-lite: gemini
 
   # OpenAI API models
-  gpt-5.1: codex
+  gpt-5.2: codex
   gpt-5-mini: codex
   gpt-5-nano: codex
-  gpt-5-pro: codex
+  gpt-5.1: codex
+  gpt-5: codex
+  gpt-4.1: codex
+  gpt-5.2-pro: codex
 
 # CLI models - for CLI tools (interactive mode with --model)
 # These are model identifiers recognized by the CLI tools (claude, gemini, codex)
@@ -64,11 +69,18 @@ cli_models:
   gemini-2.5-pro: gemini
   gemini-2.5-flash: gemini
   gemini-2.5-flash-lite: gemini
+  gemini-2.0-flash: gemini
+  gemini-2.0-flash-lite: gemini
 
   # Codex CLI models (OpenAI)
   gpt-5.1-codex-max: codex
   gpt-5.1-codex-mini: codex
+  gpt-5.2: codex
   gpt-5.1: codex
+  gpt-5.1-codex: codex
+  gpt-5-codex: codex
+  gpt-5-codex-mini: codex
+  gpt-5: codex
 
 # Expensive models requiring explicit user confirmation
 # These models have significantly higher costs and:
@@ -77,4 +89,4 @@ cli_models:
 #   - Will prompt for confirmation before use (unless --yes flag)
 expensive:
   - claude-opus-4-5
-  - gpt-5-pro
+  - gpt-5.2-pro
