@@ -65,8 +65,8 @@ class SubmissionFinder:
                 parts = rel_path.parts
                 section = parts[0] if len(parts) > 1 else "unknown"
 
-                # Extract student name from filename
-                student_name = self._extract_student_name(notebook_path.stem)
+                # Extract student name (prefer folder name, fallback to filename)
+                student_name = self._extract_student_name(notebook_path.stem, rel_path)
 
                 # Validate notebook
                 is_valid, error = self._validate_notebook(notebook_path)
@@ -90,35 +90,97 @@ class SubmissionFinder:
 
         return self.submissions
 
-    def _extract_student_name(self, filename: str) -> str:
+    def _extract_student_name(self, filename: str, rel_path: Path = None) -> str:
         """
-        Extract student name from filename.
+        Extract student name from submission path.
 
-        Handles various naming conventions:
-        - "FirstName LastName"
-        - "LastName, FirstName"
-        - "student_name"
-        - "assignment_name (FirstName LastName)"
+        Extraction priority:
+        1. Moodle folder structure: "Danny Radon_2150767_assignsubmission_file/"
+        2. Parentheses in filename: "Lab 1 (John Doe).ipynb"
+        3. Cleaned filename as fallback
+
+        Args:
+            filename: The notebook filename (without extension)
+            rel_path: Relative path from submissions directory
+
+        Returns:
+            Extracted student name
         """
-        # Remove common prefixes/suffixes
-        name = filename
+        folder_name = None
 
-        # Handle parentheses pattern: "Lab 1 (John Doe)" -> "John Doe"
-        paren_match = re.search(r'\(([^)]+)\)', name)
+        # Try to extract from Moodle folder structure first
+        if rel_path and len(rel_path.parts) >= 2:
+            # Look for Moodle format: "StudentName_ID_assignsubmission_file"
+            for part in rel_path.parts[1:]:  # Skip section folder
+                moodle_match = re.match(r'^(.+?)_\d+_assignsubmission_file$', part)
+                if moodle_match:
+                    folder_name = moodle_match.group(1)
+                    break
+
+        # Try parentheses pattern in filename: "Lab 1 (John Doe)" -> "John Doe"
+        paren_match = re.search(r'\(([^)]+)\)', filename)
+        paren_name = None
         if paren_match:
-            name = paren_match.group(1)
+            paren_name = paren_match.group(1).strip().replace('_', ' ')
 
-        # Clean up
-        name = name.strip()
+        # Decision logic
+        name = None
 
-        # Replace underscores with spaces
+        # Check if parentheses name is a placeholder or generic
+        placeholder_names = {'student', 'your name', 'name', 'student name', 'firstname lastname'}
+        paren_is_placeholder = paren_name and paren_name.lower() in placeholder_names
+
+        if paren_name and not paren_is_placeholder:
+            # Prefer parentheses if it's a real name
+            name = paren_name
+        elif folder_name:
+            # Use Moodle folder name
+            name = folder_name
+        elif paren_name:
+            # Even if placeholder, use it if no folder name available
+            # But try to extract from folder name as last resort
+            name = folder_name if folder_name else paren_name
+        else:
+            # Fallback: try to extract name from filename
+            name = self._extract_name_from_filename(filename)
+
+        # Final cleanup
+        name = name.strip() if name else filename
         name = name.replace('_', ' ')
 
-        # If still empty or looks like a number, use filename
+        # If still empty or just numbers, use folder name or filename
         if not name or name.isdigit():
-            name = filename
+            name = folder_name if folder_name else filename
 
         return name
+
+    def _extract_name_from_filename(self, filename: str) -> str:
+        """
+        Extract student name from filename when no parentheses or folder pattern.
+
+        Handles patterns like:
+        - "Lab_06_Logistic_Regression_MiriamObiajuru_3510F25"
+        - "Lab06_LogisticRegression_Jagjiwan_3101036"
+        """
+        # Remove common assignment prefixes
+        patterns_to_remove = [
+            r'^(Copy_of_)?',  # Copy prefix
+            r'Lab[_\s]?\d+[_\s]?',  # Lab numbers
+            r'Logistic[_\s]?Regression[_\s]?',  # Assignment names
+            r'[_\s]?3510F25[_\s]?',  # Course codes
+            r'[_\s]?3520F25[_\s]?',
+            r'[_\s]?\d{7}[_\s]?',  # Student IDs (7 digits)
+            r'[_\s]?\(\d+\)[_\s]?',  # Numbers in parentheses like (2)
+        ]
+
+        name = filename
+        for pattern in patterns_to_remove:
+            name = re.sub(pattern, ' ', name, flags=re.IGNORECASE)
+
+        # Clean up multiple spaces and trim
+        name = re.sub(r'\s+', ' ', name).strip()
+
+        return name if name else filename
 
     def _validate_notebook(self, notebook_path: Path) -> Tuple[bool, Optional[str]]:
         """
