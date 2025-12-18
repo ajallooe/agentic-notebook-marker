@@ -163,7 +163,7 @@ resolve_provider_from_model() {
     if [[ -f "$MODELS_CONFIG" ]]; then
         local provider
         provider=$(grep -E "^[[:space:]]*${model_name}:" "$MODELS_CONFIG" 2>/dev/null | \
-                   sed 's/.*:[[:space:]]*//' | tr -d '"' | tr -d "'" || true)
+                   head -1 | sed 's/.*:[[:space:]]*//' | tr -d '"' | tr -d "'" || true)
         if [[ -n "$provider" ]]; then
             echo "$provider"
             return 0
