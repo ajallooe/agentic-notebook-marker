@@ -63,6 +63,14 @@ The system orchestrates multiple specialized LLM agents:
 - Interacts with instructor for clarifications
 - **Output**: `processed/activities/A<i>_criteria.md` and `processed/rubric.md`
 
+### 1.5 Name Resolver Agent (Interactive)
+
+- Analyzes submission file paths to extract student names
+- Uses LLM to infer names from creative/non-standard filename patterns
+- Matches extracted names against gradebook entries when available
+- Handles misspellings, truncations, and various name formats
+- **Output**: `processed/name_mapping.json`
+
 ### 2. Marker Agents (Headless, Parallel)
 
 - One agent per activity per student (structured) OR one per student (free-form)
@@ -193,16 +201,21 @@ The `assignments/sample-assignment/` directory contains example submissions demo
 - `llm_caller.sh`: Unified CLI router for Claude Code, Gemini CLI, OpenAI CLI
 - `parallel_runner.sh`: Parallel task execution with configurable concurrency
 - `extract_activities.py`: Extract student input per activity with graceful error handling
-- `find_submissions.py`: Recursively find and validate notebook submissions
+- `find_submissions.py`: Recursively find and validate notebook submissions, with smart name extraction from Moodle folder structure
 - `create_dashboard.py`: Generate interactive Jupyter notebook for mark adjustment
 
 **Agent Prompts** (`src/prompts/`):
 
 - Pattern Designer: `pattern_designer_structured.md`, `pattern_designer_freeform.md`
+- Name Resolver: `name_resolver.md`
 - Marker: `marker_structured.md`, `marker_freeform.md`
 - Normalizer: `normalizer_structured.md`, `normalizer_freeform.md`
 - Unifier: `unifier.md`
 - Aggregator: `aggregator.md`
+
+**Agent Implementations** (`src/agents/`):
+
+- `name_resolver.py`: LLM-based student name extraction from submission paths
 
 **Orchestrators** (root directory):
 
@@ -214,6 +227,7 @@ The `assignments/sample-assignment/` directory contains example submissions demo
 1. **Submission Discovery**: `find_submissions.py` → `submissions_manifest.json`
 2. **Activity Extraction**: `extract_activities.py` → per-activity JSON (structured only)
 3. **Pattern Design**: Interactive agent → `activities/A*_criteria.md`, `rubric.md`
+3.5. **Name Resolution**: LLM agent → `name_mapping.json` (maps paths to canonical names)
 4. **Parallel Marking**: Marker agents (via `parallel_runner.sh`) → `markings/`
 5. **Normalization**: Normalizer agents → `normalized/A*_scoring.md`
 6. **Adjustment Dashboard**: `create_dashboard.py` → `adjustment_dashboard.ipynb`
@@ -415,17 +429,21 @@ models:
   gemini-2.5-pro: gemini
   gemini-2.5-flash: gemini
   gemini-2.5-flash-lite: gemini
+  gemini-2.0-flash: gemini
+  gemini-2.0-flash-lite: gemini
 
   # OpenAI/Codex models
+  gpt-5.2: codex
   gpt-5.1: codex
+  gpt-5: codex
   gpt-5-mini: codex
   gpt-5-nano: codex
-  gpt-5-pro: codex
+  gpt-4.1: codex
 
 # Expensive models (require CLI confirmation, cannot be defaults)
 expensive:
   - claude-opus-4-5
-  - gpt-5-pro
+  - gpt-5.2-pro
 ```
 
 **Model Resolution Priority:**
@@ -585,9 +603,32 @@ Remove LLM generation artifacts (like "YOLO mode is enabled...") from files:
 
 # Clean in-place
 ./utils/clean_artifacts.sh input.md --artifacts configs/artifacts.jsonl --in-place
+
+# Clean silently (for use in scripts)
+./utils/clean_artifacts.sh input.md --in-place --quiet
 ```
 
-Artifacts are defined in a JSONL file with `{"artifact": "text to remove"}` entries.
+Artifacts are defined in a JSONL file with `{"artifact": "text to remove"}` entries. Use `--quiet` to suppress all output except errors.
+
+### `utils/clean_notebook_outputs.sh`
+
+Clear outputs from Jupyter notebooks (equivalent to "Edit > Clear All Outputs"):
+
+```bash
+# Preview what would be cleaned
+./utils/clean_notebook_outputs.sh "assignments/Lab 01" --dry-run
+
+# Clean only submissions (not base notebook)
+./utils/clean_notebook_outputs.sh "assignments/Lab 01" --submissions-only
+
+# Clean all notebooks in assignment
+./utils/clean_notebook_outputs.sh "assignments/Lab 01"
+
+# Clean a single notebook
+./utils/clean_notebook_outputs.sh "path/to/notebook.ipynb"
+```
+
+Clears cell outputs and execution counts. Useful for reducing file sizes before marking (outputs are not needed for grading).
 
 ### `utils/clear_caches.sh`
 
@@ -605,6 +646,98 @@ Clear any explicit API caches that may be accumulating costs (use after interrup
 ```
 
 **Note**: Claude and OpenAI caches auto-expire (5-10 min). Only Gemini explicit caches need manual deletion, but this system uses implicit caching which is managed automatically by Google.
+
+## Post-Marking Grade Utilities
+
+The `utils/` directory contains Python scripts for post-processing grades after marking is complete.
+
+### `utils/fix_grades.py`
+
+Fix student name mismatches in grades.csv files to match gradebook names:
+
+```bash
+# Preview changes without modifying files
+python3 utils/fix_grades.py --dry-run
+
+# Apply fixes to all assignments
+python3 utils/fix_grades.py
+```
+
+The script:
+
+- Normalizes student names (handles "Lab XX - Name" prefixes, ID numbers, etc.)
+- Maps creative filename-derived names to canonical gradebook names
+- Includes manual overrides for known problematic cases
+- Optionally removes random_state related marks from feedback
+
+### `utils/apply_grades.py`
+
+Apply grades from `grades.csv` directly to gradebooks without LLM (after names are fixed):
+
+```bash
+# Apply to specific gradebooks
+python3 utils/apply_grades.py \
+    --assignment-dir "assignments/Lab 01" \
+    --gradebooks "gradebooks/section1.csv" "gradebooks/section2.csv"
+
+# Preview without writing
+python3 utils/apply_grades.py \
+    --assignment-dir "assignments/Lab 01" \
+    --gradebooks "gradebooks/section1.csv" \
+    --dry-run
+```
+
+Output: `<gradebook>_filled.csv` with Total Mark and Feedback Card columns added.
+
+### `utils/recalculate_grades.py`
+
+Reverse random_state related deductions and bonuses in existing grades:
+
+```bash
+# Preview changes
+python3 utils/recalculate_grades.py --dry-run
+
+# Apply changes with verbose output
+python3 utils/recalculate_grades.py -v
+
+# Apply changes
+python3 utils/recalculate_grades.py
+```
+
+The script:
+
+- Finds random_state codes in `normalized/*_scoring.md` files
+- Identifies which codes were applied to each student's feedback
+- Reverses the deductions/bonuses in Total Mark
+- Updates both `grades.csv` and individual `*_feedback.md` files
+
+### `utils/remove_random_state.py`
+
+Remove all random_state content from feedback text in grades.csv:
+
+```bash
+# Preview changes
+python3 utils/remove_random_state.py --dry-run
+
+# Apply changes
+python3 utils/remove_random_state.py
+```
+
+Removes sentences, bullet points, and clauses mentioning random_state without affecting marks.
+
+### `utils/nullify_random_state_marks.py`
+
+Nullify random_state codes in `approved_scheme.json` files:
+
+```bash
+# Preview changes
+python3 utils/nullify_random_state_marks.py --dry-run
+
+# Apply changes
+python3 utils/nullify_random_state_marks.py
+```
+
+Sets deduction/bonus values to 0.0 for random_state related codes. After running this, you need to re-run the unifier and aggregator stages (or use `recalculate_grades.py`) to apply changes to student grades.
 
 ## Error Handling and Recovery
 
