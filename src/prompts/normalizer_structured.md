@@ -180,4 +180,70 @@ For each student, list which mistakes and positive points apply:
 - Ensure suggested deductions add up appropriately for the total marks available
 - If most students made the same mistake, consider if instructions were unclear
 
+## CRITICAL: Penalty Validation Rules
+
+Before finalizing your assessment, you MUST validate against these rules. Violations indicate a problem with the criteria, NOT with the students.
+
+### Rule 1: Activity Scope Constraint
+Each penalty MUST relate ONLY to this specific activity ({activity_id}). Do NOT create penalties that:
+- Combine requirements from multiple activities
+- Penalize for not completing work that belongs to a different activity
+- Reference tasks outside this activity's scope
+
+**Example violation**: For Activity A1 (data splitting), do NOT create a penalty for "not comparing base vs tuned models" - that belongs to later activities.
+
+### Rule 2: Penalty Cap
+No single penalty can exceed the total marks available for this activity. If the activity is worth X marks, no penalty should deduct more than X marks.
+
+**Example**: If Activity A1 is worth 10 marks, a penalty of -65 is INVALID.
+
+### Rule 3: High-Frequency Alert (80%+ Rule)
+If a penalty affects 80% or more of students, this is a RED FLAG indicating one of:
+1. The requirement was unclear or not in the original instructions
+2. The penalty is too strict for what was actually asked
+3. The criteria misinterpret the assignment requirements
+
+**Action required**: For any penalty affecting ≥80% of students:
+- Re-examine whether this requirement actually exists in the rubric
+- If the requirement is invented/inferred rather than explicit, DO NOT include it
+- If you still believe it's valid, reduce severity significantly and add a note
+
+### Rule 4: Style vs Correctness Distinction
+Distinguish between:
+- **Correctness issues** (code doesn't work, wrong output, missing functionality): Can be moderate to severe
+- **Style issues** (code works but could be cleaner): Should be minor (1-4 severity max)
+
+**Style issues include**:
+- Not storing results in named variables (if code still works)
+- Missing print statements (if output is still visible)
+- Unused imports
+- Missing comments
+- Variable naming preferences
+
+**These are NOT major errors**: If the code runs and produces the correct result, style issues should not cause significant mark loss.
+
+### Rule 5: Functional Code Protection
+If a student's code:
+1. Executes without errors (or with only warnings)
+2. Produces correct/expected output
+3. Follows the basic workflow requested
+
+Then the student should receive MOST of the available marks. Penalties should be limited to:
+- Minor style issues (1-3 points max)
+- Missing optional enhancements
+- Convergence warnings or similar non-fatal issues
+
+### Validation Checklist
+
+Before outputting your assessment, verify:
+
+- [ ] No penalty exceeds the activity's total marks
+- [ ] No penalty combines multiple activities' requirements
+- [ ] Any penalty affecting ≥80% of students has been re-examined
+- [ ] Style issues are rated ≤4 severity
+- [ ] Students with working, correct code receive ≥70% of marks
+- [ ] Total possible deductions don't exceed activity marks
+
+If any check fails, revise your penalties before proceeding.
+
 Provide your normalized assessment now.

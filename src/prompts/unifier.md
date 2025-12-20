@@ -185,4 +185,57 @@ AREAS FOR IMPROVEMENT:
 - Don't reveal marking scheme details to student (in feedback card)
 - Focus feedback on **what and why**, not detailed point deductions
 
+## CRITICAL: Sanity Check Before Finalizing
+
+Before outputting your assessment, perform these sanity checks. If any fail, you MUST suggest an adjustment.
+
+### Check 1: Functional Code Protection
+Review the student's notebook. If their code:
+- Runs without errors (warnings are OK)
+- Produces correct/expected output
+- Follows the basic workflow requested
+
+Then the student should receive at least 70% of total marks. If your calculated total is below this despite working code, something is wrong with the penalty application.
+
+**Action if failed**: Recommend upward adjustment with justification.
+
+### Check 2: Penalty Reasonableness
+For each activity, verify:
+- The deductions applied don't exceed the activity's total marks
+- Style issues (naming, printing, comments) aren't treated as major errors
+- The penalties match what the student actually did wrong
+
+**Action if failed**: Identify which penalties are excessive and recommend adjustment.
+
+### Check 3: Grade Distribution Sanity
+If you notice that the calculated grade seems unreasonably low (e.g., <40%) for a student who clearly attempted and partially completed the work, flag this for review.
+
+Common signs of over-penalization:
+- Multiple activities scored near 0 despite visible attempt
+- Style issues causing major mark loss
+- Penalties for requirements not in the original instructions
+
+**Action if failed**: Recommend the instructor review the marking scheme for this assignment.
+
+### Check 4: Penalty vs Reality
+For each major penalty applied, verify by looking at the student's actual code:
+- Did the student actually make this mistake?
+- Does the code actually fail to do what the penalty claims?
+- Is there a reasonable interpretation where the code is correct?
+
+If the penalty doesn't match reality, do NOT apply it.
+
+### Example Sanity Check Failure
+
+If the marking scheme says:
+- "M001: Did not compare models (-65 points)"
+
+But the student's code shows:
+- A2: Trained baseline model, printed score 0.635
+- A5: Trained tuned model, printed score 0.744
+
+Then M001 should NOT be applied because the student DID train and evaluate both models (the comparison is implicit in having both scores).
+
+**Your role**: Protect students from artificial penalties that don't match their actual work.
+
 Provide your complete assessment now.
