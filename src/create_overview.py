@@ -9,11 +9,13 @@ If present, notifies user and exits.
 Usage:
     python3 create_overview.py <notebook_path> --model <model_name>
     python3 create_overview.py <notebook_path> --provider <provider>
+    python3 create_overview.py <notebook_path> --api-model <model_name>
 
 Example:
     python3 create_overview.py assignments/lab1/notebook.ipynb --model claude-sonnet-4
     python3 create_overview.py assignments/lab1/notebook.ipynb --model gemini-2.5-pro
     python3 create_overview.py assignments/lab1/notebook.ipynb --provider claude
+    python3 create_overview.py assignments/lab1/notebook.ipynb --api-model gemini-2.5-flash
 """
 
 import argparse
@@ -173,7 +175,7 @@ Your entire response should be valid markdown that can be directly saved as over
     return prompt
 
 
-def call_llm(prompt: str, provider: str, model: str = None) -> str:
+def call_llm(prompt: str, provider: str, model: str = None, api_model: str = None) -> str:
     """Call the LLM via llm_caller.sh to generate the overview content."""
 
     # Get the path to llm_caller.sh
@@ -195,14 +197,21 @@ def call_llm(prompt: str, provider: str, model: str = None) -> str:
     if model:
         cmd.extend(["--model", model])
 
+    if api_model:
+        cmd.extend(["--api-model", api_model])
+
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=300  # 5-minute timeout to prevent hanging
         )
         return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        print("Error: LLM call timed out after 5 minutes", file=sys.stderr)
+        sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"Error calling LLM: {e}", file=sys.stderr)
         print(f"STDERR: {e.stderr}", file=sys.stderr)
@@ -238,11 +247,27 @@ Examples:
         help='LLM provider (optional if --model is specified)'
     )
 
+    parser.add_argument(
+        '--api-model',
+        dest='api_model',
+        help='Model for direct API calls (headless only, requires API key)'
+    )
+
     args = parser.parse_args()
 
     # Resolve provider from model if not specified
     provider = args.provider
     model = args.model
+    api_model = args.api_model
+
+    # Resolve provider: --api-model takes priority if no --provider/--model
+    if not provider and api_model and not model:
+        provider = resolve_provider_from_model(api_model)
+        if not provider:
+            print(f"Error: Unknown API model '{api_model}'", file=sys.stderr)
+            print("", file=sys.stderr)
+            print(format_available_models(), file=sys.stderr)
+            sys.exit(1)
 
     if not provider and model:
         provider = resolve_provider_from_model(model)
@@ -252,8 +277,8 @@ Examples:
             print(format_available_models(), file=sys.stderr)
             sys.exit(1)
 
-    if not provider and not model:
-        print("Error: --model or --provider is required", file=sys.stderr)
+    if not provider and not model and not api_model:
+        print("Error: --model, --provider, or --api-model is required", file=sys.stderr)
         sys.exit(1)
 
     if not provider:
@@ -283,6 +308,8 @@ Examples:
     print(f"Using provider: {provider}")
     if model:
         print(f"Using model: {model}")
+    if api_model:
+        print(f"Using API model: {api_model}")
     print()
 
     # Load and analyze the notebook
@@ -298,7 +325,7 @@ Examples:
     print()
 
     # Create prompt (use model name if provided, otherwise just provider name for template)
-    model_for_template = model or provider
+    model_for_template = model or api_model or provider
     prompt = create_prompt(notebook_path, notebook_summary, provider, model_for_template)
 
     # Call LLM to generate overview
@@ -307,7 +334,7 @@ Examples:
     print()
 
     try:
-        overview_content = call_llm(prompt, provider, model)
+        overview_content = call_llm(prompt, provider, model, api_model)
     except Exception as e:
         print(f"Error generating overview: {e}", file=sys.stderr)
         sys.exit(1)

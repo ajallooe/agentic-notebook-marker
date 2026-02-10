@@ -502,8 +502,20 @@ if [[ ${#MISSING_OVERVIEWS[@]} -gt 0 ]]; then
 
             log_info "Using notebook: $(basename "$BASE_NOTEBOOK")"
 
+            # Build create_overview.sh command
+            local overview_cmd=("$SCRIPT_DIR/create_overview.sh" "$BASE_NOTEBOOK")
+            if [[ -n "$PROVIDER" ]]; then
+                overview_cmd+=("--provider" "$PROVIDER")
+            fi
+            if [[ -n "$MODEL" ]]; then
+                overview_cmd+=("--model" "$MODEL")
+            fi
+            if [[ -n "$API_MODEL" ]]; then
+                overview_cmd+=("--api-model" "$API_MODEL")
+            fi
+
             # Run create_overview.sh
-            if "$SCRIPT_DIR/create_overview.sh" "$BASE_NOTEBOOK" --provider "$PROVIDER" --model "$MODEL"; then
+            if "${overview_cmd[@]}"; then
                 log_success "Generated overview.md for $assignment"
             else
                 log_error "Failed to generate overview.md for $assignment"
