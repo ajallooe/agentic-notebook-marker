@@ -503,7 +503,7 @@ if [[ ${#MISSING_OVERVIEWS[@]} -gt 0 ]]; then
             log_info "Using notebook: $(basename "$BASE_NOTEBOOK")"
 
             # Build create_overview.sh command
-            local overview_cmd=("$SCRIPT_DIR/create_overview.sh" "$BASE_NOTEBOOK")
+            overview_cmd=("$SCRIPT_DIR/create_overview.sh" "$BASE_NOTEBOOK")
             if [[ -n "$PROVIDER" ]]; then
                 overview_cmd+=("--provider" "$PROVIDER")
             fi
